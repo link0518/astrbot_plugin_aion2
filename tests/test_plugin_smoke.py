@@ -5,6 +5,7 @@
 
 import asyncio
 import importlib
+import inspect
 import json
 import re
 import sys
@@ -136,7 +137,7 @@ class FakeStar:
     def __init__(self, context):
         self.context = context
 
-    async def html_render(self, tmpl, data=None, options=None):
+    async def html_render(self, tmpl, data, options=None):
         # 替身把卡片写到磁盘，供离线查看
         name = getattr(self, "_card_seq", 0)
         self._card_seq = name + 1
@@ -883,6 +884,30 @@ async def run_commands():
     check("关键词开关可关闭", not got.images and not got.plain)
     cfg["free_trigger"] = True
 
+    # 图片模式下必须真的出图，而不是悄悄回退成文字
+    cfg["output_mode"] = "image"
+    ev = FakeMessageEvent()
+    async for _ in plugin.item(ev, 110160008):
+        pass
+    check(
+        "图片模式出图",
+        len(ev.images) == 1 and not ev.plain,
+        f"images={ev.images} plain={len(ev.plain)}",
+    )
+    check("出图后不残留渲染错误", plugin._last_render_error == "", plugin._last_render_error)
+    check(
+        "渲染参数不带 timeout（Playwright 按毫秒解释，会直接超时）",
+        "timeout" not in main.IMAGE_OPTIONS,
+        str(main.IMAGE_OPTIONS),
+    )
+    # 替身比真的宽松过一次：给 data 加了默认值，导致漏传 data 的调用被放过，
+    # 真机上却每次都 TypeError 回退文字。这里盯住签名，别再松回去。
+    check(
+        "渲染替身的 data 与真实签名一样是必填",
+        inspect.signature(FakeStar.html_render).parameters["data"].default
+        is inspect.Parameter.empty,
+    )
+
     # 关掉图片模式应回退纯文本
     cfg["output_mode"] = "text"
     ev = FakeMessageEvent()
@@ -902,6 +927,11 @@ async def run_commands():
     async for _ in plugin.item(ev, 110160008):
         pass
     check("渲染失败回退文本", len(ev.plain) == 1 and "训练用巨剑" in ev.plain[0], ev.plain[0][:40] if ev.plain else "")
+    check(
+        "渲染失败会记下原因供面板展示",
+        "playwright not installed" in plugin._last_render_error,
+        plugin._last_render_error,
+    )
 
     await plugin.terminate()
     check("terminate 正常", plugin._client is None)

@@ -45,8 +45,10 @@ PLUGIN_DIR = Path(__file__).resolve().parent
 # 搜索时取多少条候选，够判断是否唯一匹配
 SEARCH_PAGE_SIZE = 20
 
-# 卡片截图参数，长图交给 full_page
-IMAGE_OPTIONS = {"type": "png", "full_page": True, "timeout": 30}
+# 卡片截图参数。长图交给 full_page。
+# 不要加 timeout：AstrBot 会把 options 原样转给渲染服务，而 Playwright 的
+# timeout 单位是毫秒，写 30 会被当成 30 毫秒，截图必然超时。
+IMAGE_OPTIONS = {"type": "png", "full_page": True}
 
 # 候选列表的等待时间：这段时间内回序号才认，超时就当没这回事
 CHOICE_TTL = 10.0
@@ -146,6 +148,8 @@ class Aion2Plugin(Star):
         self._subs = GlossaryStore(_data_dir() / "event_subs.json", 31536000)
         self._sent = GlossaryStore(_data_dir() / "event_sent.json", 3600)
         self._event_task: asyncio.Task | None = None
+        # 最近一次卡片渲染失败的原因，面板上展示，便于排查「只出文字不出图」
+        self._last_render_error = ""
         # 配置面板的后端接口，注册到 WebUI 的插件详情页
         self._console = ConsoleAPI(self)
         self._console.register(PLUGIN_NAME)
@@ -297,6 +301,12 @@ class Aion2Plugin(Star):
                 "glossary": len(self._glossary),
             },
             "next": upcoming,
+            "output": {
+                "mode": "图片" if self._image_mode() else "文本",
+                "width": self._width(),
+                # 最近一次卡片渲染失败的原因，图片模式下排查用；成功后会清空
+                "lastError": self._last_render_error,
+            },
         }
 
     async def selftest(self) -> dict:
@@ -380,9 +390,13 @@ class Aion2Plugin(Star):
         if self._image_mode():
             try:
                 html = render.render(kind, ctx)
-                url = await self.html_render(html, options=dict(IMAGE_OPTIONS))
+                # data 是 html_render 的必填参数（模板变量），卡片是渲染好的静态
+                # HTML，没有变量，传空字典；漏传会直接 TypeError 并回退成文本。
+                url = await self.html_render(html, {}, options=dict(IMAGE_OPTIONS))
+                self._last_render_error = ""
                 return event.image_result(url)
             except Exception as exc:  # noqa: BLE001 - 渲染失败不影响查询本身
+                self._last_render_error = f"{type(exc).__name__}: {exc}"
                 logger.warning(f"卡片渲染失败，回退为文本输出：{exc}")
         if callable(text):
             text = text()

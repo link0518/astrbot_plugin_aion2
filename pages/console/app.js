@@ -152,9 +152,30 @@ function renderOverview() {
             push.kinds.length ? push.kinds.join("、") : badge("未选择", "warn"),
           ]),
         ]),
+        el("div", { class: "stat" }, [
+          el("div", { class: "k", text: "输出方式" }),
+          el("div", { class: "v" }, [
+            s.output ? s.output.mode : "—",
+            s.output && s.output.mode === "图片"
+              ? el("small", { text: `${s.output.width}px 宽` })
+              : null,
+          ]),
+        ]),
       ]),
     ])
   );
+
+  // 图片模式下渲染失败会静默回退成纯文本，群里只看到文字。这里把原因摊开，
+  // 免得只能去翻服务端日志。
+  if (s.output && s.output.lastError) {
+    frag.append(
+      card(
+        "卡片渲染失败",
+        "图片模式的查询已回退为纯文本。下面是最近一次渲染失败的原因。",
+        [el("div", { class: "empty", text: s.output.lastError })]
+      )
+    );
+  }
 
   const next = s.next.map((item) =>
     el("div", { class: "item" }, [

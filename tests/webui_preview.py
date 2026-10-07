@@ -160,6 +160,7 @@ def fake_state(core, now: datetime) -> dict:
         },
         "cache": {"entries": 14, "ttl": 600, "glossary": 128},
         "next": upcoming,
+        "output": {"mode": "图片", "width": 720, "lastError": ""},
     }
 
 
