@@ -35,6 +35,11 @@ GROUPS: tuple[dict[str, str], ...] = (
         "hint": "时刻表为本地推算，不依赖上游接口；官方临时调整不会同步。",
     },
     {
+        "key": "kinah",
+        "label": "基纳价格",
+        "hint": "每小时抓取各区的基纳行情并渲染成一张图缓存下来，群里发「基纳」即可取图。数据来自交易所公开挂单，仅供参考。",
+    },
+    {
         "key": "network",
         "label": "网络与缓存",
         "hint": "上游会限流，请求频率与缓存时间是保护措施，不建议为了「实时」把它们调激进。",
@@ -56,6 +61,11 @@ FIELDS: tuple[dict[str, Any], ...] = (
     {"key": "event_remind_minigame", "group": "push", "depends": ("event_push",)},
     {"key": "quiet_start", "group": "push", "control": "clock", "depends": ("event_push",)},
     {"key": "quiet_end", "group": "push", "control": "clock", "depends": ("event_push",)},
+    {"key": "kinah_enable", "group": "kinah"},
+    {"key": "kinah_interval", "group": "kinah", "min": 600, "max": 86400, "unit": "秒", "depends": ("kinah_enable",)},
+    {"key": "kinah_source_7881", "group": "kinah", "depends": ("kinah_enable",)},
+    {"key": "kinah_source_pa", "group": "kinah", "depends": ("kinah_enable",)},
+    {"key": "kinah_zones", "group": "kinah", "depends": ("kinah_enable",)},
     {"key": "rate_limit", "group": "network", "min": 0.5, "max": 20.0, "step": 0.5, "unit": "次/秒"},
     {"key": "request_timeout", "group": "network", "min": 3, "max": 120, "unit": "秒"},
     {"key": "cache_ttl", "group": "network", "min": 0, "max": 86400, "unit": "秒"},

@@ -282,7 +282,7 @@ check("输出模式读配置", plugin._image_mode() is True)
 
 print("\n== 指令注册 ==")
 registered = STUB_FILTER.commands
-expected = {"帮助", "区域", "服务器", "职业", "角色", "装备", "道具", "公告", "排行", "活动"}
+expected = {"帮助", "区域", "服务器", "职业", "角色", "装备", "道具", "公告", "排行", "活动", "基纳"}
 missing = expected - set(registered)
 check("平铺指令齐全", not missing, f"缺少 {missing}" if missing else f"{len(registered)} 个")
 check("不再有 /aion 指令组", "aion" not in registered)
@@ -686,22 +686,46 @@ async def run_commands():
 
     # 后台循环的生与死
     cfg["event_push"] = False
+    cfg["kinah_enable"] = False
     await plugin.initialize()
-    check("总开关关闭不起循环", plugin._event_task is None)
+    check(
+        "总开关关闭不起循环",
+        plugin._event_task is None and plugin._kinah_task is None,
+    )
     cfg["event_push"] = True
+    cfg["kinah_enable"] = True
     await plugin.initialize()
     await plugin.initialize()
-    check("开启后起后台循环", plugin._event_task is not None)
+    check(
+        "开启后起后台循环",
+        plugin._event_task is not None and plugin._kinah_task is not None,
+    )
+    # 再喊一次不该起出第二份
+    task_ids = (id(plugin._event_task), id(plugin._kinah_task))
+    await plugin.initialize()
+    check(
+        "重复 initialize 不会重复起循环",
+        (id(plugin._event_task), id(plugin._kinah_task)) == task_ids,
+    )
     await plugin._stop_event_loop()
-    check("可停掉后台循环", plugin._event_task is None)
+    await plugin._stop_kinah_loop()
+    check(
+        "可停掉后台循环",
+        plugin._event_task is None and plugin._kinah_task is None,
+    )
 
     # 没走 initialize 时，收到消息也要能把循环带起来
     plugin._event_task = None
+    plugin._kinah_task = None
     ev = FakeMessageEvent("帮助")
     async for _ in plugin.on_free_text(ev):
         pass
-    check("收到消息会补起循环", plugin._event_task is not None)
+    check(
+        "收到消息会补起循环",
+        plugin._event_task is not None and plugin._kinah_task is not None,
+    )
     await plugin._stop_event_loop()
+    await plugin._stop_kinah_loop()
 
     # 角色定位的三种分支
     ev = FakeMessageEvent()
@@ -816,6 +840,134 @@ async def run_commands():
 
     got = await fire("help")
     check("help 亦可触发", any("AION2 查询" in t for t in got.plain), str(got.plain)[:40])
+
+    # ---------------- 基纳价格
+    from aion2_plugin.core import kinah as kinah_mod
+
+    plugin._kinah = kinah_mod.Snapshot(
+        fetched_at=1758000000.0,
+        rate=6.7119,
+        zones=("asia", "eu"),
+        quotes=[
+            kinah_mod.Quote(kinah_mod.SOURCE_7881, "asia", 6.1, 7.46, 9.9, 60, 378),
+            kinah_mod.Quote(kinah_mod.SOURCE_PA, "asia", 9.3, 15.77, 22.4, 60, 67),
+        ],
+    )
+    kinah_card = plugin.kinah_card_path()
+    kinah_card.parent.mkdir(parents=True, exist_ok=True)
+    kinah_card.write_bytes(b"\x89PNG\r\n\x1a\ncached")
+
+    cfg["output_mode"] = "image"
+    ev = FakeMessageEvent()
+    async for _ in plugin.kinah_price(ev):
+        pass
+    check(
+        "基纳指令直接发缓存的图",
+        len(ev.images) == 1 and ev.images[0] == str(kinah_card),
+        str(ev.images),
+    )
+    check("有缓存图时不回退文字", not ev.plain, str(ev.plain)[:40])
+
+    cfg["output_mode"] = "text"
+    ev = FakeMessageEvent()
+    async for _ in plugin.kinah_price(ev):
+        pass
+    check(
+        "文本模式给价格表",
+        len(ev.images) == 0 and any("基纳价格" in t for t in ev.plain),
+        str(ev.plain)[:60],
+    )
+    check("价格表含日服中位价", any("7.5" in t for t in ev.plain), str(ev.plain)[:120])
+
+    # 漏了图就现抓一次，让第一次使用也能拿到结果
+    cfg["output_mode"] = "image"
+    kinah_card.unlink()
+    refreshed = []
+
+    async def fake_refresh():
+        refreshed.append(1)
+        kinah_card.write_bytes(b"\x89PNG\r\n\x1a\nfresh")
+        return {"ok": True}
+
+    plugin.refresh_kinah = fake_refresh
+    ev = FakeMessageEvent()
+    async for _ in plugin.kinah_price(ev):
+        pass
+    check("缺图时现抓一次", refreshed == [1], str(refreshed))
+    check(
+        "先提示再出图",
+        any("正在获取" in t for t in ev.plain) and len(ev.images) == 1,
+        str(ev.plain)[:40],
+    )
+
+    # 抓完仍无图且无快照时如实报错，不要只说「准备中」
+    plugin._kinah = None
+    kinah_card.unlink()
+    plugin._kinah_error = "未安装 playwright，基纳价格抓取不可用"
+
+    async def give_up():
+        return {"ok": False, "detail": plugin._kinah_error}
+
+    plugin.refresh_kinah = give_up
+    ev = FakeMessageEvent()
+    async for _ in plugin.kinah_price(ev):
+        pass
+    check(
+        "取不到价格时给出原因",
+        any("未安装 playwright" in t for t in ev.plain) and not ev.images,
+        str(ev.plain)[:60],
+    )
+
+    cfg["kinah_enable"] = False
+    ev = FakeMessageEvent()
+    async for _ in plugin.kinah_price(ev):
+        pass
+    check(
+        "配置里关掉时明说",
+        any("关闭" in t for t in ev.plain) and not ev.images,
+        str(ev.plain)[:40],
+    )
+    cfg["kinah_enable"] = True
+
+    # 关键词触发走的是同一条指令
+    plugin._kinah = kinah_mod.Snapshot(
+        fetched_at=1758000000.0,
+        rate=6.7119,
+        zones=("asia",),
+        quotes=[kinah_mod.Quote(kinah_mod.SOURCE_7881, "asia", 6.1, 7.46, 9.9, 60, 378)],
+    )
+    kinah_card.write_bytes(b"\x89PNG\r\n\x1a\nback")
+    got = await fire("基纳")
+    check("关键词触发基纳", len(got.images) == 1, str(got.images))
+
+    # 区域与间隔的容错
+    cfg["kinah_zones"] = ""
+    check(
+        "留空表示五大区",
+        plugin._kinah_zones() == kinah_mod.DEFAULT_ZONES,
+        str(plugin._kinah_zones()),
+    )
+    cfg["kinah_zones"] = "asia, EU　kr"
+    check(
+        "区域写法宽松且忽略大小写",
+        plugin._kinah_zones() == ("asia", "eu", "kr"),
+        str(plugin._kinah_zones()),
+    )
+    cfg["kinah_zones"] = "台服、乱写"
+    check(
+        "只认区域键，全无效时回退默认",
+        plugin._kinah_zones() == kinah_mod.DEFAULT_ZONES,
+        str(plugin._kinah_zones()),
+    )
+    cfg["kinah_zones"] = ""
+
+    cfg["kinah_interval"] = 10
+    check("刷新间隔有下限", plugin._kinah_interval() == 600, str(plugin._kinah_interval()))
+    cfg["kinah_interval"] = 999999
+    check("刷新间隔有上限", plugin._kinah_interval() == 86400, str(plugin._kinah_interval()))
+    cfg["kinah_interval"] = "abc"
+    check("坏值回退默认一小时", plugin._kinah_interval() == 3600, str(plugin._kinah_interval()))
+    cfg["kinah_interval"] = 3600
 
     for text, label in (
         ("/角色 A", "带斜杠的消息不重复响应"),
@@ -1143,6 +1295,42 @@ async def run_console():
     check("状态含下一次活动", len(state["next"]) == 2, str(state["next"]))
     check("状态含提醒配置", state["push"]["lead"] == 5 and state["push"]["enabled"] is True)
     check("状态含缓存条数", "glossary" in state["cache"] and "entries" in state["cache"])
+
+    # 基纳那块状态，面板直接照着渲染
+    check(
+        "状态含基纳字段",
+        {"enabled", "running", "interval", "zones", "card", "sources", "rate"} <= set(state["kinah"]),
+        str(sorted(state["kinah"])),
+    )
+    check("基纳默认每小时一次", state["kinah"]["interval"] == 3600, str(state["kinah"]["interval"]))
+    check(
+        "基纳列出两个数据源",
+        state["kinah"]["sources"] == ["7881", "PlayerAuctions"],
+        str(state["kinah"]["sources"]),
+    )
+    check("没有快照时不给区数", state["kinah"]["zones"] == 0, str(state["kinah"]["zones"]))
+
+    STUB_REQUEST.json_body = {"values": {"kinah_interval": 7200, "kinah_zones": "asia, eu"}}
+    res = await console.save_config()
+    check(
+        "基纳配置可写",
+        res["kind"] == "json" and panel_cfg["kinah_interval"] == 7200 and panel_cfg["kinah_zones"] == "asia, eu",
+        str(res)[:60],
+    )
+    check("面板跟着显示新间隔", panel_plugin.status()["kinah"]["interval"] == 7200)
+    STUB_REQUEST.json_body = {"values": {"kinah_interval": 10}}
+    res = await console.save_config()
+    check("基纳间隔低于下限被拒", res["kind"] == "error", str(res.get("message"))[:40])
+    STUB_REQUEST.json_body = {"values": {"kinah_source_pa": False}}
+    res = await console.save_config()
+    check(
+        "可只留一个数据源",
+        res["kind"] == "json" and panel_plugin.status()["kinah"]["sources"] == ["7881"],
+        str(panel_plugin.status()["kinah"]["sources"]),
+    )
+    STUB_REQUEST.json_body = {"values": {"kinah_source_pa": True, "kinah_interval": 3600, "kinah_zones": ""}}
+    res = await console.save_config()
+    check("基纳配置可复位", res["kind"] == "json", str(res)[:60])
 
     # 面板标的「今日已推」要按当天统计，历史记录不能算进来
     from datetime import datetime as dt2

@@ -415,6 +415,50 @@ def events_text(now: datetime | None = None, *, tomorrow: bool = False) -> str:
     return events.text_table(now, tomorrow=tomorrow)
 
 
+def kinah_context(snapshot, *, width: int = 720) -> dict:
+    """基纳价格卡片。快照由 core.kinah 采集，这里只负责换算成展示值。
+
+    两个来源的价格已经归一到「元/百万基纳」，可以直接比长短。
+    """
+    rows = snapshot.rows()
+    values = [
+        q.median
+        for row in rows
+        for q in (row["cn"], row["us"])
+        if q is not None and q.median > 0
+    ]
+    top = max(values) if values else 1.0
+
+    def cell(quote) -> dict:
+        if quote is None or quote.median <= 0:
+            return {"has": False, "text": "—", "low": "", "high": "", "pct": 0}
+        return {
+            "has": True,
+            "text": f"{quote.median:,.1f}",
+            "low": f"{quote.low:,.1f}",
+            "high": f"{quote.high:,.1f}",
+            # 条形按所有区里的最高价归一，留一点最小宽度让低价也看得见
+            "pct": max(3, round(quote.median / top * 100)),
+        }
+
+    out = []
+    for row in rows:
+        cn, us = row["cn"], row["us"]
+        if cn is None and us is None:
+            continue
+        stock = cn.total if cn is not None else (us.total if us is not None else 0)
+        out.append({"label": row["label"], "cn": cell(cn), "us": cell(us), "stock": stock})
+
+    moment = datetime.fromtimestamp(snapshot.fetched_at) if snapshot.fetched_at else datetime.now()
+    return {
+        "width": width,
+        "stamp": moment.strftime("%Y-%m-%d %H:%M"),
+        "rows": out,
+        "rate": f"1 美元 ≈ {snapshot.rate:.4f} 元" if snapshot.rate else "",
+        "errors": snapshot.errors[:3],
+    }
+
+
 def search_text(page) -> str:
     if not page.items:
         return "没有找到匹配的角色。"

@@ -100,5 +100,35 @@
     "description": "卡片宽度（像素）",
     "type": "int",
     "default": 720
+  },
+  "kinah_enable": {
+    "description": "基纳价格",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后每小时自动抓取各区的基纳行情，渲染成一张图片缓存下来；群里发「基纳」即可取图。依赖 AstrBot 的 Playwright 文转图，未安装时该功能自动跳过。"
+  },
+  "kinah_interval": {
+    "description": "刷新间隔（秒）",
+    "type": "int",
+    "default": 3600,
+    "hint": "两次抓取之间的间隔，600–86400 秒。默认 3600 即每小时一张图。"
+  },
+  "kinah_source_7881": {
+    "description": "数据源 7881",
+    "type": "bool",
+    "default": true,
+    "hint": "国内交易平台 7881，按人民币计价。"
+  },
+  "kinah_source_pa": {
+    "description": "数据源 PlayerAuctions",
+    "type": "bool",
+    "default": true,
+    "hint": "海外交易平台 PlayerAuctions，按美元计价后折算人民币。需要能取到汇率，取不到汇率时会自动跳过该源。"
+  },
+  "kinah_zones": {
+    "description": "统计哪些区",
+    "type": "string",
+    "default": "",
+    "hint": "用逗号、空格或顿号分隔，可选 asia 日服、eu 欧服、naw 美西、nae 美东、sa 南美服、tw 台服、kr 韩服。留空表示五大区（日、欧、美西、美东、南美）。台服与韩服只有 7881 有报价。"
   }
 }

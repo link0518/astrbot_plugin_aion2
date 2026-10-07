@@ -190,6 +190,52 @@ function renderOverview() {
     ])
   );
 
+  // 基纳价格：后台按间隔抓一次并渲染成图缓存，群里发「基纳」直接取这张图。
+  // 抓取失败时沿用上一轮的图，所以「最近更新」比「现在」旧是正常的。
+  const kinah = s.kinah;
+  if (kinah) {
+    const hours = kinah.interval / 3600;
+    const every =
+      hours >= 1
+        ? `${hours.toFixed(hours % 1 ? 1 : 0)} 小时`
+        : `${Math.round(kinah.interval / 60)} 分钟`;
+    frag.append(
+      card("基纳价格", "抓取交易所的在售挂单，取中位价渲染成一张图。", [
+        el("div", { class: "grid" }, [
+          el("div", { class: "stat" }, [
+            el("div", { class: "k", text: "抓取循环" }),
+            el("div", { class: "v" }, [
+              kinah.running ? badge("运行中", "ok") : badge("未运行", "warn"),
+            ]),
+          ]),
+          stat("刷新间隔", every, kinah.enabled ? "" : "配置里已关闭"),
+          el("div", { class: "stat" }, [
+            el("div", { class: "k", text: "缓存图片" }),
+            el("div", { class: "v" }, [
+              kinah.card ? badge("已就绪", "ok") : badge("尚无", "warn"),
+            ]),
+          ]),
+          stat("最近更新", kinah.fetchedAt || "—"),
+        ]),
+        el("div", { class: "grid", style: "margin-top:10px" }, [
+          stat("覆盖区数", kinah.zones ? `${kinah.zones} 个区` : "—"),
+          stat(
+            "数据源",
+            kinah.sources.length ? kinah.sources.join("、") : "未选择",
+            kinah.rate ? `汇率 ${kinah.rate}` : "汇率未取到"
+          ),
+        ]),
+      ])
+    );
+    if (kinah.error) {
+      frag.append(
+        card("基纳抓取异常", "本次没取到完整数据，卡片上会标注缺了哪些。", [
+          el("div", { class: "empty", text: kinah.error }),
+        ])
+      );
+    }
+  }
+
   frag.append(
     card(
       "维护工具",

@@ -1,6 +1,6 @@
 """AION2 查询插件的核心层。"""
 
-from . import events
+from . import events, kinah
 from .client import Aion2Client, RateLimiter, decode_character_id
 from .errors import (
     Aion2Error,
@@ -69,6 +69,7 @@ __all__ = [
     "clean_text",
     "decode_character_id",
     "events",
+    "kinah",
     "region_of",
     "settings",
 ]

@@ -636,6 +636,94 @@ check(
     str(posts[0].posted_at),
 )
 
+print("\n== 基纳价格 ==")
+kinah = importlib.import_module("aion2_plugin.core.kinah")
+
+check("默认区都在区表里", all(z in kinah.ZONE_LABELS for z in kinah.DEFAULT_ZONES), str(kinah.DEFAULT_ZONES))
+check(
+    "每个默认区两个来源都有分片",
+    all(z in kinah.ZONE_7881 and z in kinah.ZONE_PA for z in kinah.DEFAULT_ZONES),
+)
+check("台服韩服只有 7881", "tw" in kinah.ZONE_7881 and "tw" not in kinah.ZONE_PA)
+check("两个区的 7881 分片不重复", len(set(sum(kinah.ZONE_7881.values(), ()))) == len(sum(kinah.ZONE_7881.values(), ())))
+
+avail, reason = kinah.available()
+check("可用性探测返回布尔加原因", isinstance(avail, bool) and isinstance(reason, str), reason)
+
+check("最低样本数是个正数", kinah.MIN_SAMPLES >= 2, str(kinah.MIN_SAMPLES))
+bad, why = kinah._quote(kinah.SOURCE_7881, "sa", [50.0], 1)
+check("挂单太少不报价", bad is None and "样本太少" in why, why)
+good, why = kinah._quote(kinah.SOURCE_7881, "asia", [6.1, 7.4, 9.9], 378)
+check("样本够就出中位价", good is not None and good.median == 7.4 and good.total == 378)
+check("一条挂单也没有时给原因", kinah._quote(kinah.SOURCE_PA, "eu", [], 0)[1].endswith("没有可用的在售数据"))
+
+# 单个极端挂单（PA 上出现过 $100/百万基纳）不该把区间拉飞
+lonely = [6.0, 7.0, 7.2, 7.4, 7.5, 7.6, 7.8, 8.0, 8.4, 100.0]
+low, mid, high = kinah._stats(lonely)
+check("中位价不受极值影响", mid == 7.55, str(mid))
+check("区间上限被压到分位内", high < 20, str(high))
+check("区间下限也不会被极值带偏", 5.0 < low <= 7.0, str(low))
+check("空列表返回三个零", kinah._stats([]) == (0.0, 0.0, 0.0))
+check("单条数据照样能算", kinah._stats([42.0]) == (42.0, 42.0, 42.0))
+
+snap = kinah.Snapshot(
+    fetched_at=1758000000.0,
+    rate=6.7119,
+    zones=("asia", "eu", "tw"),
+    channel="chrome",
+    quotes=[
+        kinah.Quote(kinah.SOURCE_7881, "asia", 6.1, 7.46, 9.9, 60, 378),
+        kinah.Quote(kinah.SOURCE_PA, "asia", 9.3, 15.77, 22.4, 60, 67),
+        kinah.Quote(kinah.SOURCE_7881, "tw", 3.2, 4.1, 5.0, 20, 44),
+    ],
+    errors=["PlayerAuctions 欧服：没有在售"],
+)
+check("取到指定区的报价", snap.quote("asia", kinah.SOURCE_7881).median == 7.46)
+check("取不到的来源返回空", snap.quote("eu", kinah.SOURCE_7881) is None)
+check("区数统计按有报价的区算", kinah.zone_count(snap) == 2, str(kinah.zone_count(snap)))
+
+rows = snap.rows()
+check("行顺序跟着抓取的区", [r["key"] for r in rows] == ["asia", "eu", "tw"], str([r["key"] for r in rows]))
+check("区名是中文", rows[0]["label"] == "日服", rows[0]["label"])
+check("欧服两边都空", rows[1]["cn"] is None and rows[1]["us"] is None)
+check("台服只有 7881", rows[2]["cn"] is not None and rows[2]["us"] is None)
+check("没有区时回退到默认顺序", kinah.Snapshot(zones=()).rows()[0]["key"] == kinah.DEFAULT_ZONES[0])
+
+table = kinah.text_table(snap)
+check("文本表带区名与单位", "日服" in table and "元" in table, table.splitlines()[0] if table else "")
+check("文本表保留一位小数", "7.5" in table, table)
+check(
+    "文本表跳过两源都无的区",
+    not any(line.strip().startswith("欧服") for line in table.splitlines()),
+    table,
+)
+check("文本表把取不到的部分列出来", "没有在售" in table, table)
+
+raw = snap.to_dict()
+again = kinah.Snapshot.from_dict(raw)
+check("快照能原样读写", again.rate == snap.rate and len(again.quotes) == len(snap.quotes))
+check("坏数据不炸", kinah.Snapshot.from_dict("not-a-dict") is None and kinah.Snapshot.from_dict(None) is None)
+check("缺字段的快照也能读", kinah.Snapshot.from_dict({"quotes": [{}]}).quotes[0].median == 0.0)
+
+kctx = render.kinah_context(snap, width=680)
+check("卡片宽度可传", kctx["width"] == 680)
+krows = {r["label"]: r for r in kctx["rows"]}
+check("卡片跳过两源都无的区", "欧服" not in krows, str(list(krows)))
+check("最高价条形占满", krows["日服"]["us"]["pct"] == 100, str(krows["日服"]["us"]["pct"]))
+check("低价条形有最小宽度", krows["台服"]["cn"]["pct"] >= 3, str(krows["台服"]["cn"]["pct"]))
+check("缺来源显示破折号", krows["台服"]["us"]["text"] == "—" and krows["台服"]["us"]["has"] is False)
+check("在售量取有的那一侧", krows["台服"]["stock"] == 44, str(krows["台服"]["stock"]))
+check("汇率写成人话", "6.7119" in kctx["rate"], kctx["rate"])
+check("错误只带前三条", kctx["errors"] == ["PlayerAuctions 欧服：没有在售"])
+
+empty = render.kinah_context(kinah.Snapshot(fetched_at=1758000000.0, zones=("asia",)))
+check("空快照不抛异常", empty["rows"] == [] and empty["rate"] == "")
+
+khtml = render.render("kinah", kctx)
+check("模板渲染无残留变量", "{{" not in khtml and "{%" not in khtml)
+check("卡片含各区价格与常见区间", "各区价格" in khtml and "日服" in khtml and "常见区间" in khtml)
+check("卡片写明单位", "元 / 百万基纳" in khtml)
+
 print(f"\n结果：{len(PASS)} 项通过，{len(FAIL)} 项失败")
 if FAIL:
     print("失败项：")

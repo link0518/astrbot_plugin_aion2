@@ -9,6 +9,7 @@
 """
 
 import asyncio
+import json
 import re
 import time
 from dataclasses import dataclass
@@ -32,6 +33,7 @@ from .core import (
     Page,
     clean_text,
     events,
+    kinah,
 )
 from .core.cache import GlossaryStore
 from .i18n import class_name, localized, pc_class_name, race_name, server_name, set_simplify
@@ -56,6 +58,9 @@ CHOICE_TTL = 10.0
 # 活动提醒的轮询间隔，要短于 events.pending_reminders 的命中窗口（60 秒）
 EVENT_TICK = 20.0
 
+# 基纳价格：启动后先等一会儿再抓第一次，避开 AstrBot 启动时的高峰
+KINAH_START_DELAY = 25.0
+
 # 无斜杠触发的句式。带参数的指令要求整条消息就是「角色 mizoo」这种写法，
 # 不带参数的指令要求整条消息正好是那个词，免得群里闲聊提到「服务器」就被拦下来。
 FREE_RULES = (
@@ -68,6 +73,7 @@ FREE_RULES = (
     ("服务器", re.compile(r"^服务器$")),
     ("职业", re.compile(r"^职业$")),
     ("区域", re.compile(r"^区域$")),
+    ("基纳", re.compile(r"^基纳$")),
     ("帮助", re.compile(r"^(?:帮助|help)$")),
 )
 
@@ -148,6 +154,11 @@ class Aion2Plugin(Star):
         self._subs = GlossaryStore(_data_dir() / "event_subs.json", 31536000)
         self._sent = GlossaryStore(_data_dir() / "event_sent.json", 3600)
         self._event_task: asyncio.Task | None = None
+        # 基纳价格：最新快照、图片缓存与定时刷新循环
+        self._kinah_task: asyncio.Task | None = None
+        self._kinah: kinah.Snapshot | None = self._load_kinah()
+        self._kinah_lock = asyncio.Lock()
+        self._kinah_error = ""
         # 最近一次卡片渲染失败的原因，面板上展示，便于排查「只出文字不出图」
         self._last_render_error = ""
         # 配置面板的后端接口，注册到 WebUI 的插件详情页
@@ -157,21 +168,25 @@ class Aion2Plugin(Star):
     # ------------------------------------------------------------ 基础设施
 
     async def initialize(self):
-        """按配置启动活动提醒的后台循环。"""
+        """按配置启动后台循环。"""
         self._ensure_event_loop()
 
     def _ensure_event_loop(self) -> None:
         """起后台循环。
 
         正常由 AstrBot 在插件加载后调用 initialize；万一某个版本没有这一步，
-        收到第一条消息时也会补上，免得提醒功能静默失效。
+        收到第一条消息时也会补上，免得提醒与价格刷新静默失效。
         """
-        if self._event_task is not None or not self.config.get("event_push", True):
-            return
-        try:
-            self._event_task = asyncio.create_task(self._event_loop())
-        except RuntimeError:  # 当前没有运行中的事件循环，等下一次
-            self._event_task = None
+        if self._event_task is None and self.config.get("event_push", True):
+            try:
+                self._event_task = asyncio.create_task(self._event_loop())
+            except RuntimeError:  # 当前没有运行中的事件循环，等下一次
+                self._event_task = None
+        if self._kinah_task is None and self.config.get("kinah_enable", True):
+            try:
+                self._kinah_task = asyncio.create_task(self._kinah_loop())
+            except RuntimeError:
+                self._kinah_task = None
 
     def _build_client(self) -> Aion2Client:
         region = str(self.config.get("region", "asia")).strip().lower()
@@ -212,6 +227,7 @@ class Aion2Plugin(Star):
 
     async def terminate(self):
         await self._stop_event_loop()
+        await self._stop_kinah_loop()
         await self._drop_client()
         self._glossary.save()
         self._subs.save()
@@ -229,6 +245,18 @@ class Aion2Plugin(Star):
         except Exception as exc:  # noqa: BLE001 - 停用阶段的异常只记日志
             logger.warning(f"停止活动提醒循环时出错：{exc}")
 
+    async def _stop_kinah_loop(self) -> None:
+        task, self._kinah_task = self._kinah_task, None
+        if task is None:
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:  # noqa: BLE001 - 停用阶段的异常只记日志
+            logger.warning(f"停止基纳价格刷新时出错：{exc}")
+
     # ------------------------------------------------------- 配置面板能力
 
     async def apply_config(self, changed: dict) -> None:
@@ -245,6 +273,10 @@ class Aion2Plugin(Star):
             self._ensure_event_loop()
         else:
             await self._stop_event_loop()
+        if self.config.get("kinah_enable", True):
+            self._ensure_event_loop()
+        else:
+            await self._stop_kinah_loop()
 
     def status(self) -> dict:
         """运行状态快照，供配置面板展示。"""
@@ -301,6 +333,28 @@ class Aion2Plugin(Star):
                 "glossary": len(self._glossary),
             },
             "next": upcoming,
+            "kinah": {
+                "enabled": bool(self.config.get("kinah_enable", True)),
+                "running": self._kinah_task is not None and not self._kinah_task.done(),
+                "interval": self._kinah_interval(),
+                "zones": kinah.zone_count(self._kinah),
+                "fetchedAt": (
+                    f"{datetime.fromtimestamp(self._kinah.fetched_at):%Y-%m-%d %H:%M}"
+                    if self._kinah is not None and self._kinah.fetched_at
+                    else ""
+                ),
+                "rate": f"{self._kinah.rate:.4f}" if self._kinah is not None and self._kinah.rate else "",
+                "card": self.kinah_card_path().exists(),
+                "sources": [
+                    kinah.SOURCE_LABELS[key]
+                    for key, on in (
+                        (kinah.SOURCE_7881, self.config.get("kinah_source_7881", True)),
+                        (kinah.SOURCE_PA, self.config.get("kinah_source_pa", True)),
+                    )
+                    if on
+                ],
+                "error": self._kinah_error,
+            },
             "output": {
                 "mode": "图片" if self._image_mode() else "文本",
                 "width": self._width(),
@@ -564,6 +618,7 @@ class Aion2Plugin(Star):
             "活动 [明天]　活动时刻表",
             "活动 订阅　订阅开场提醒（裂隙、小游戏）",
             "活动 退订　取消订阅",
+            "基纳　各区基纳价格（每小时更新）",
             "区域　查询区域说明",
             "帮助　本说明",
             "",
@@ -834,6 +889,28 @@ class Aion2Plugin(Star):
         text = render.events_text(now=now, tomorrow=tomorrow)
         yield await self._emit(event, "events", ctx, text)
 
+    @filter.command("基纳")
+    async def kinah_price(self, event: AstrMessageEvent):
+        """查看国际服各区的基纳价格（每小时自动更新）。"""
+        if not self.config.get("kinah_enable", True):
+            yield event.plain_result("基纳价格已在插件配置里关闭。")
+            return
+        _, card = self._kinah_paths()
+        image_mode = self._image_mode()
+        # 还没有图就现抓一次，让第一次使用也能拿到结果，而不是只回一句「准备中」
+        if image_mode and (self._kinah is None or not card.exists()):
+            yield event.plain_result("正在获取基纳价格，首次约需一分钟…")
+            await self.refresh_kinah()
+        if image_mode and card.exists():
+            yield event.image_result(str(card))
+            return
+        if self._kinah is not None:
+            yield event.plain_result(kinah.text_table(self._kinah))
+            return
+        yield event.plain_result(
+            f"暂时取不到基纳价格：{self._kinah_error or '数据准备中，请稍后再试'}"
+        )
+
     async def _event_loop(self):
         """活动提醒的后台循环，由 _stop_event_loop 取消。"""
         while True:
@@ -870,6 +947,150 @@ class Aion2Plugin(Star):
         self._sent.save()
         return sent
 
+    # ------------------------------------------------------------ 基纳价格
+
+    def _kinah_paths(self) -> tuple[Path, Path]:
+        """基纳快照与卡片图片的落盘位置。"""
+        base = _data_dir()
+        return base / "kinah.json", base / "kinah_card.png"
+
+    def _load_kinah(self) -> kinah.Snapshot | None:
+        """读上次的快照，让重启之后指令立刻有图可发。"""
+        path, _ = self._kinah_paths()
+        try:
+            return kinah.Snapshot.from_dict(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            return None
+
+    def _save_kinah(self, snapshot: kinah.Snapshot) -> None:
+        path, _ = self._kinah_paths()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(
+                json.dumps(snapshot.to_dict(), ensure_ascii=False, indent=1), encoding="utf-8"
+            )
+            tmp.replace(path)
+        except OSError as exc:
+            logger.warning(f"保存基纳快照失败：{exc}")
+
+    def _kinah_interval(self) -> int:
+        """两次抓取的间隔（秒）。"""
+        try:
+            return max(600, min(int(self.config.get("kinah_interval", 3600)), 86400))
+        except (TypeError, ValueError):
+            return 3600
+
+    def _kinah_zones(self) -> tuple[str, ...]:
+        """要抓的区。留空表示国际服五大区。"""
+        raw = str(self.config.get("kinah_zones", "") or "").strip()
+        if not raw:
+            return kinah.DEFAULT_ZONES
+        picked = [item.strip().lower() for item in re.split(r"[,\s，、]+", raw) if item.strip()]
+        valid = tuple(item for item in picked if item in kinah.ZONE_LABELS)
+        return valid or kinah.DEFAULT_ZONES
+
+    def kinah_card_path(self) -> Path:
+        """当前缓存的价格图，供指令与面板使用。"""
+        return self._kinah_paths()[1]
+
+    def _kinah_profile(self) -> Path:
+        """抓取用的浏览器 profile 目录。
+
+        PlayerAuctions 的 Cloudflare 放行 cookie 存在这里，下一次抓取可以少过一轮
+        挑战；每次都用全新浏览器反复过挑战，很容易被判断成异常流量。
+        """
+        return _data_dir() / "kinah_profile"
+
+    async def _kinah_loop(self):
+        """基纳价格的定时刷新，由 _stop_kinah_loop 取消。"""
+        await asyncio.sleep(KINAH_START_DELAY)
+        while True:
+            try:
+                await self.refresh_kinah()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - 单次失败不能拖垮循环
+                logger.warning(f"刷新基纳价格出错：{exc}")
+            await asyncio.sleep(self._kinah_interval())
+
+    async def refresh_kinah(self) -> dict:
+        """抓一次价格并生成图片。并发调用会排队，避免同时开多个浏览器。"""
+        async with self._kinah_lock:
+            try:
+                snapshot = await asyncio.to_thread(
+                    kinah.collect,
+                    self._kinah_zones(),
+                    want_7881=bool(self.config.get("kinah_source_7881", True)),
+                    want_pa=bool(self.config.get("kinah_source_pa", True)),
+                    profile_dir=self._kinah_profile(),
+                )
+            except kinah.KinahError as exc:
+                self._kinah_error = str(exc)
+                return {"ok": False, "detail": self._kinah_error}
+            except Exception as exc:  # noqa: BLE001 - 失败原因要回给面板
+                self._kinah_error = f"{type(exc).__name__}: {exc}"
+                logger.warning(f"抓取基纳价格失败：{exc}")
+                return {"ok": False, "detail": self._kinah_error}
+
+            # 一个区都没抓到时不覆盖旧快照，免得把上一轮的好数据换成空表
+            if not snapshot.quotes and self._kinah is not None:
+                self._kinah_error = "；".join(snapshot.errors[:3]) or "本次没有取到任何价格"
+                return {"ok": False, "detail": self._kinah_error, "errors": snapshot.errors}
+
+            self._kinah = snapshot
+            self._kinah_error = ""
+            self._save_kinah(snapshot)
+            card = await self._render_kinah_card(snapshot)
+            return {
+                "ok": True,
+                "zones": kinah.zone_count(snapshot),
+                "card": card,
+                "seconds": round(snapshot.elapsed, 1),
+                "errors": snapshot.errors,
+            }
+
+    async def _render_kinah_card(self, snapshot: kinah.Snapshot) -> bool:
+        """渲染价格卡片并存到本地。
+
+        存文件而不是存渲染服务的链接：链接有有效期，而这张图要撑到下一次刷新。
+        """
+        _, card = self._kinah_paths()
+        try:
+            context = render.kinah_context(snapshot, width=self._width())
+            html = render.render("kinah", context)
+            url = await self.html_render(html, {}, options=dict(IMAGE_OPTIONS))
+        except Exception as exc:  # noqa: BLE001 - 渲染失败不影响价格本身
+            self._kinah_error = f"卡片渲染失败：{type(exc).__name__}: {exc}"
+            logger.warning(self._kinah_error)
+            return False
+        if not await self._store_image(url, card):
+            return False
+        self._last_render_error = ""
+        return True
+
+    async def _store_image(self, url: str, target: Path) -> bool:
+        """把渲染结果落盘，兼容返回链接与返回本地文件两种情况。"""
+        import httpx
+
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_suffix(".tmp")
+        try:
+            if url.startswith("http"):
+                async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as http:
+                    resp = await http.get(url)
+                if resp.status_code != 200 or not resp.content:
+                    raise RuntimeError(f"HTTP {resp.status_code}")
+                tmp.write_bytes(resp.content)
+            else:
+                tmp.write_bytes(Path(url.replace("file://", "", 1)).read_bytes())
+            tmp.replace(target)
+            return True
+        except Exception as exc:  # noqa: BLE001 - 落盘失败只影响图片
+            self._kinah_error = f"卡片保存失败：{type(exc).__name__}: {exc}"
+            logger.warning(self._kinah_error)
+            return False
+
     # ------------------------------------------------------- 无斜杠触发
 
     async def _free_handler(self, name: str, event: AstrMessageEvent, groups):
@@ -896,6 +1117,7 @@ class Aion2Plugin(Star):
                 "服务器": self.servers,
                 "职业": self.classes,
                 "区域": self.region_info,
+                "基纳": self.kinah_price,
                 "帮助": self.help,
             }[name]
             async for result in handler(event):

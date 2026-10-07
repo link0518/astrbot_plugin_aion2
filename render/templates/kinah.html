@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block body %}
+<style>
+  .krow { display: grid; grid-template-columns: 96px 1fr 1fr; gap: 12px; align-items: center;
+          padding: 9px 12px; background: #161a26; border: 1px solid #252b3c; border-radius: 10px; }
+  .krow + .krow { margin-top: 7px; }
+  .kzone { font-size: 15px; font-weight: 600; color: #dfe3f2; line-height: 1.25; }
+  .kzone .ksub { font-size: 10px; font-weight: 400; color: #7f889f; margin-top: 3px; }
+  .kcell { min-width: 0; }
+  .ksrc { font-size: 10px; color: #7f889f; letter-spacing: .4px; }
+  .kval { font-size: 19px; font-weight: 700; color: #e9c87c; line-height: 1.25; }
+  .kval .u { font-size: 11px; font-weight: 400; color: #8b93ab; margin-left: 3px; }
+  .kval.none { color: #5d6478; font-weight: 400; }
+  .kbar { height: 5px; border-radius: 3px; background: #232941; margin-top: 5px; overflow: hidden; }
+  .kbar i { display: block; height: 100%; border-radius: 3px; }
+  .kcn i { background: linear-gradient(90deg, #3f6fa8, #6f9de0); }
+  .kus i { background: linear-gradient(90deg, #a3742e, #e0b164); }
+  .rate-v { font-size: 19px; font-weight: 700; color: #e2e6f5; line-height: 1.2; }
+  .err { font-size: 11px; color: #b98a4e; margin-top: 8px; line-height: 1.5; }
+</style>
+
+<div class="hdr">
+  <div class="who">
+    <div class="nm">基纳价格</div>
+    <div class="sub">
+      <span><b>{{ stamp }}</b></span>
+      <span>单位：元 / 百万基纳</span>
+      <span>取各区在售挂单的中位价</span>    </div>
+  </div>
+  <div class="power">
+    <div class="lb">汇率</div>
+    <div class="rate-v">{{ rate or "—" }}</div>
+  </div>
+</div>
+
+<div class="sec">
+  <div class="sec-t">各区价格<span class="cnt">{{ rows|length }} 个区 · 每区两个来源</span></div>
+  {% for r in rows %}
+  <div class="krow">
+    <div class="kzone">{{ r.label }}<div class="ksub">在售 {{ r.stock }}</div></div>
+    <div class="kcell">
+      <div class="ksrc">7881 人民币</div>
+      <div class="kval {{ '' if r.cn.has else 'none' }}">{{ r.cn.text }}{% if r.cn.has %}<span class="u">元</span>{% endif %}</div>
+      <div class="kbar kcn"><i style="width: {{ r.cn.pct }}%"></i></div>
+    </div>
+    <div class="kcell">
+      <div class="ksrc">PlayerAuctions 折人民币</div>
+      <div class="kval {{ '' if r.us.has else 'none' }}">{{ r.us.text }}{% if r.us.has %}<span class="u">元</span>{% endif %}</div>
+      <div class="kbar kus"><i style="width: {{ r.us.pct }}%"></i></div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="sec">
+  <div class="sec-t">常见区间<span class="cnt">已去掉两端异常挂单，结论仍以中位价为准</span></div>
+  <div class="rows">
+    {% for r in rows %}
+    {% if r.cn.has or r.us.has %}
+    <div class="row">
+      <span class="chip">{{ r.label }}</span>
+      <span class="eq-n">
+        {% if r.cn.has %}7881 {{ r.cn.low }} ~ {{ r.cn.high }}{% else %}—{% endif %}
+        　｜　
+        {% if r.us.has %}PA {{ r.us.low }} ~ {{ r.us.high }}{% else %}—{% endif %}
+      </span>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+</div>
+
+{% if errors %}
+<div class="err">
+  本次未取到：{{ errors|join("；") }}
+</div>
+{% endif %}
+
+<div class="foot">
+  <span>价格为第三方交易平台的在售挂单，仅供比较参考</span>
+  <span>{{ stamp }}</span>
+</div>
+{% endblock %}
