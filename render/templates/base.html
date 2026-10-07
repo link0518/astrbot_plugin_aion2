@@ -1,7 +1,9 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* 渲染端是整页截图，页面空白区域默认填白；视口大于卡片时露出的部分用卡片底色兜住 */
+  html, body { background: #0e1017; }
   .card {
-    width: {{ width }}px; padding: 22px 24px 18px;
+    width: {{ width }}px; margin: 0 auto; padding: 22px 24px 18px;
     font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
     color: #e9eaf0; -webkit-font-smoothing: antialiased;
     background: linear-gradient(158deg, #1a1f2e 0%, #12151f 58%, #0e1017 100%);
