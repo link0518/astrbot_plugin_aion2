@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="hdr">
+  {% if portrait %}<img class="portrait" src="{{ portrait }}" alt="">{% endif %}
+  <div class="who">
+    <div class="nm">{{ name }}{% if title %} <span style="font-size:14px;color:#e9c87c;font-weight:400">「{{ title }}」</span>{% endif %}</div>
+    <div class="sub">
+      <span>Lv <b>{{ level }}</b></span>
+      <span><b>{{ class_name }}</b></span>
+      <span>{{ race }} · {{ gender }}</span>
+      <span>{{ server }}</span>
+      {% if guild %}<span>军团 <b>{{ guild }}</b></span>{% endif %}
+    </div>
+  </div>
+  <div class="power">
+    <div class="lb">战斗力</div>
+    <div class="vv">{{ combat_power }}</div>
+  </div>
+</div>
+
+{% if stats %}
+<div class="sec">
+  <div class="sec-t">角色属性<span class="cnt">共 {{ stats|length }} 项</span></div>
+  <div class="grid">
+    {% for s in stats %}
+    <div class="stat">
+      <div class="stat-n">{{ s.name }}</div>
+      <div class="stat-v">{{ s.value }}</div>
+      {% for e in s.effects[:2] %}<div class="eff">{{ e }}</div>{% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="sec">
+  <div class="sec-t">称号收集<span class="cnt">{{ titles_owned }} / {{ titles_total }}</span></div>
+  <div class="bar"><div class="bar-f" style="width: {{ title_pct }}%"></div></div>
+</div>
+
+{% if daevanion %}
+<div class="sec">
+  <div class="sec-t">守护者板进度<span class="cnt">{{ daevanion|length }} 个</span></div>
+  <div class="rows">
+    {% for b in daevanion %}
+    <div class="row">
+      <span class="chip" style="min-width:82px;color:#d8dcf0">{{ b.name }}</span>
+      <div class="bar"><div class="bar-f" style="width: {{ b.percent }}%"></div></div>
+      <span class="chip">{{ b.open_nodes }} / {{ b.total_nodes }} · {{ b.percent }}%</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if note %}<div class="miss">{{ note }}</div>{% endif %}
+
+<div class="foot">
+  <span>数据来自 {{ region_label }} 官方站点</span>
+  <span>{{ fetched_at }}</span>
+</div>
+{% endblock %}

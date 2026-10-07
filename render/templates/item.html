@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="hdr">
+  {% if icon %}<img class="portrait" src="{{ icon }}" alt="">{% endif %}
+  <div class="who">
+    <div class="nm">{{ name }}</div>
+    <div class="sub">
+      <span><b>{{ grade_label }}</b></span>
+      {% if category %}<span>{{ category }}</span>{% endif %}
+      {% if type_label %}<span>{{ type_label }}</span>{% endif %}
+      <span>ID <b>{{ item_id }}</b></span>
+    </div>
+  </div>
+</div>
+
+{% if name_note %}<div class="miss">{{ name_note }}</div>{% endif %}
+
+<div class="sec">
+  <div class="sec-t">基础信息</div>
+  <div class="grid">
+    {% for f in basics %}
+    <div class="stat">
+      <div class="stat-n">{{ f.name }}</div>
+      <div class="stat-v">{{ f.value }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% if main_stats %}
+<div class="sec">
+  <div class="sec-t">主属性<span class="cnt">共 {{ main_stats|length }} 项</span></div>
+  <div class="grid">
+    {% for s in main_stats %}
+    <div class="stat">
+      <div class="stat-n">{{ s.name }}</div>
+      <div class="stat-v">{{ s.value }}</div>
+      {% if s.range %}<div class="eff">浮动 {{ s.range }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if classes or costumes %}
+<div class="sec">
+  {% if classes %}
+  <div class="sec-t">可用职业</div>
+  <div class="skills">
+    {% for c in classes %}<span class="sk">{{ c }}</span>{% endfor %}
+  </div>
+  {% endif %}
+  {% if costumes %}
+  <div class="sec-t" style="margin-top:12px">外观</div>
+  <div class="skills">
+    {% for c in costumes %}<span class="sk">{{ c }}</span>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if note %}<div class="miss">{{ note }}</div>{% endif %}
+
+<div class="foot">
+  <span>数据来自 AION2 官方道具库</span>
+  <span>{{ fetched_at }}</span>
+</div>
+{% endblock %}

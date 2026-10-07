@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AION2 查询 · 控制台</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="top">
+        <h1>AION2 查询 · 控制台</h1>
+        <span class="badge accent" id="regionBadge" hidden></span>
+        <span class="spacer"></span>
+        <span class="sub" id="clock"></span>
+      </header>
+
+      <div class="body">
+        <nav class="nav" id="nav">
+          <button data-tab="overview" aria-current="true">运行状态</button>
+          <button data-tab="config">配置项</button>
+          <button data-tab="schedule">活动时刻表</button>
+        </nav>
+        <main class="main" id="view">
+          <div class="loading">正在读取插件状态…</div>
+        </main>
+      </div>
+    </div>
+
+    <div class="savebar" id="savebar">
+      <div class="info" id="saveInfo"></div>
+      <button class="btn ghost" id="discardBtn">放弃改动</button>
+      <button class="btn primary" id="saveBtn">保存并生效</button>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

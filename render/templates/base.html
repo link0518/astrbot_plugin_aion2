@@ -1,0 +1,65 @@
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  .card {
+    width: {{ width }}px; padding: 22px 24px 18px;
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    color: #e9eaf0; -webkit-font-smoothing: antialiased;
+    background: linear-gradient(158deg, #1a1f2e 0%, #12151f 58%, #0e1017 100%);
+    border: 1px solid #2a3145; border-radius: 18px;
+  }
+  .hdr { display: flex; align-items: center; gap: 16px; padding-bottom: 16px; border-bottom: 1px solid #252b3c; }
+  .portrait {
+    width: 84px; height: 84px; border-radius: 14px; object-fit: cover;
+    background: #1c2231; border: 1px solid #39415a; flex: 0 0 auto;
+  }
+  .who { flex: 1 1 auto; min-width: 0; }
+  .nm { font-size: 26px; font-weight: 700; letter-spacing: .5px; color: #f4f5f9; line-height: 1.2;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sub { margin-top: 6px; font-size: 14px; color: #98a1bb; display: flex; flex-wrap: wrap; gap: 6px 12px; }
+  .sub b { color: #d8dcf0; font-weight: 500; }
+  .power { text-align: right; flex: 0 0 auto; }
+  .power .lb { font-size: 12px; color: #8b93ab; letter-spacing: 1px; }
+  .power .vv { font-size: 26px; font-weight: 700; color: #e9c87c; line-height: 1.15; }
+  .sec { margin-top: 16px; }
+  .sec-t { font-size: 14px; font-weight: 600; color: #9fb0d8; letter-spacing: 1px;
+           display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .sec-t::before { content: ""; width: 3px; height: 14px; background: #5b78c4; border-radius: 2px; }
+  .sec-t .cnt { margin-left: auto; font-size: 12px; font-weight: 400; color: #7d86a0; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .stat { background: #171b27; border: 1px solid #262c3e; border-radius: 10px; padding: 8px 10px; }
+  .stat-n { font-size: 11px; color: #8b93ab; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stat-v { font-size: 17px; font-weight: 600; color: #e2e6f5; margin-top: 2px; }
+  .eff { font-size: 11px; color: #7f9a86; margin-top: 3px; line-height: 1.4; }
+  .rows { display: flex; flex-direction: column; gap: 6px; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+         background: #161a26; border: 1px solid #252b3c; border-radius: 9px; }
+  .bar { flex: 1 1 auto; height: 6px; background: #232941; border-radius: 3px; overflow: hidden; }
+  .bar-f { height: 100%; background: linear-gradient(90deg, #4f7bd6, #8ab4f8); border-radius: 3px; }
+  .chip { font-size: 11px; color: #93a2c4; flex: 0 0 auto; }
+  .en { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 8px; }
+  .eq { display: flex; align-items: center; gap: 8px; padding: 6px 9px;
+        background: #161a26; border: 1px solid #252b3c; border-radius: 9px; min-width: 0; }
+  .eq img { width: 30px; height: 30px; border-radius: 6px; background: #1d2231; flex: 0 0 auto; }
+  .eq-t { min-width: 0; flex: 1 1 auto; }
+  .eq-s { font-size: 10px; color: #7f889f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .eq-s .zh-miss { color: #b07f4e; }
+  .eq-n { font-size: 13px; color: #dfe3f2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .eq-p { font-size: 11px; color: #e9c87c; font-weight: 600; flex: 0 0 auto; }
+  .eq.Common { border-color: #3a4152; } .eq.Common .eq-n { color: #cfd4e4; }
+  .eq.Rare { border-color: #3f6fa8; } .eq.Rare .eq-n { color: #8fc0f5; }
+  .eq.Legend { border-color: #a3742e; } .eq.Legend .eq-n { color: #e5b567; }
+  .eq.Unique { border-color: #8a6bb5; } .eq.Unique .eq-n { color: #c9a7f2; }
+  .eq.Epic { border-color: #c26a4a; } .eq.Epic .eq-n { color: #f2a184; }
+  .eq.Special { border-color: #3f8f7e; } .eq.Special .eq-n { color: #7ddfc4; }
+  .skills { display: flex; flex-wrap: wrap; gap: 5px; }
+  .sk { font-size: 11px; color: #c2cbe4; background: #1a2030; border: 1px solid #2a3448;
+        border-radius: 6px; padding: 4px 8px; }
+  .sk b { color: #e9c87c; font-weight: 600; margin-left: 4px; }
+  .foot { margin-top: 16px; padding-top: 10px; border-top: 1px solid #232a3c;
+          font-size: 11px; color: #6d7690; display: flex; justify-content: space-between; gap: 12px; }
+  .miss { font-size: 12px; color: #c9903f; background: #2a2318; border: 1px solid #4a3a1f;
+          border-radius: 8px; padding: 8px 10px; margin-top: 10px; }
+</style>
+<div class="card">
+  {% block body %}{% endblock %}
+</div>

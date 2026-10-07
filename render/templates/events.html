@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block body %}
+<style>
+  .rift-row { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+  .rift { text-align: center; padding: 7px 0 5px; border-radius: 9px; background: #161a26;
+          border: 1px solid #252b3c; }
+  .rift .t { font-size: 15px; color: #cfd4e4; }
+  .rift .s { font-size: 10px; color: #7f889f; margin-top: 2px; }
+  .rift.past .t { color: #6d7690; }
+  .rift.live { border-color: #3f6fa8; background: #1a2437; }
+  .rift.live .t { color: #8fc0f5; }
+  .rift.soon { border-color: #a3742e; background: #241f16; }
+  .rift.soon .t { color: #e5b567; }
+  .tl { display: grid; grid-template-columns: repeat(12, 1fr); gap: 5px; }
+  .tl-c { position: relative; height: 44px; background: #161a26; border: 1px solid #252b3c;
+          border-radius: 8px; }
+  .tl-c.past { opacity: .5; }
+  .tl-c .hh { position: absolute; top: 3px; left: 6px; font-size: 10px; color: #7f889f; }
+  .tl-c .bar, .tl-c .riftbar, .tl-c .inv { position: absolute; bottom: 4px; background: #2b3145; }
+  .tl-c .bar { width: 5px; height: 10px; border-radius: 2px; }
+  .tl-c .bar.live { background: #6f9de0; }
+  .tl-c .bar.soon { background: #c9903f; }
+  .tl-c .riftbar { left: 7px; width: 6px; height: 22px; border-radius: 3px; background: #3f6fa8; }
+  .tl-c .riftbar.live, .tl-c .riftbar.soon { background: #8fc0f5; }
+  .tl-c .inv { left: calc(50% - 2px); width: 5px; height: 5px; border-radius: 50%; background: #4a5268; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 9px; font-size: 11px; color: #8b93ab; }
+  .legend i { display: inline-block; width: 6px; height: 12px; border-radius: 2px; margin-right: 5px; }
+</style>
+
+<div class="hdr">
+  <div class="who">
+    <div class="nm">活动时刻表</div>
+    <div class="sub">
+      <span><b>{{ date_label }}</b></span>
+      <span>{{ day_label }}时刻</span>
+      <span>{{ now_label }}</span>
+    </div>
+  </div>
+  <div class="power">
+    <div class="lb">{{ head_label }}</div>
+    <div class="vv">{{ head_value }}</div>
+  </div>
+</div>
+
+<div class="sec">
+  <div class="sec-t">时空裂隙<span class="cnt">每 3 小时 · {{ rifts|length }} 场</span></div>
+  <div class="rift-row">
+    {% for r in rifts %}
+    <div class="rift {{ r.state }}">
+      <div class="t">{{ r.time }}</div>
+      <div class="s">{{ state_labels[r.state] or "待开启" }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="sec">
+  <div class="sec-t">小游戏<span class="cnt">每小时 :15 与 :45 两个窗口{% if next_game %} · 下一场 {{ next_game }}{% endif %}</span></div>
+  <div class="tl">
+    {% for c in cells %}
+    <div class="tl-c {{ c.rift_state }}">
+      <span class="hh">{{ c.hour }}</span>
+      {% if c.rift %}<span class="riftbar {{ c.rift_state }}"></span>{% endif %}
+      {% for w in c.windows %}<span class="bar {{ w.state }}" style="left: {{ w.left }}"></span>{% endfor %}
+      <span class="inv"></span>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="legend">
+    <span><i style="background:#3f6fa8"></i>时空裂隙</span>
+    <span><i style="background:#c9903f"></i>小游戏</span>
+    <span><i style="background:#4a5268;border-radius:50%;width:5px;height:5px"></i>次元入侵 :30</span>
+    <span>每格 1 小时，按 :00 / :15 / :30 / :45 排列</span>
+  </div>
+</div>
+
+<div class="sec">
+  <div class="sec-t">小游戏组别<span class="cnt">{{ sets|length }} 组，按窗口固定</span></div>
+  <div class="rows">
+    {% for s in sets %}
+    <div class="row"><span class="chip">{{ s.label }}</span><span class="eq-n">{{ s.games }}</span></div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="sec">
+  <div class="sec-t">其他</div>
+  <div class="grid">
+    {% for o in others %}
+    <div class="stat">
+      <div class="stat-n">{{ o.name }}</div>
+      <div class="stat-v">{{ o.value }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="foot">
+  <span>Global 各分片同一时刻，均为北京时间；时刻表为本地推算，官方临时调整不会同步</span>
+  <span>{{ stamp }}</span>
+</div>
+{% endblock %}

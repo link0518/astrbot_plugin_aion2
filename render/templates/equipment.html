@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="hdr">
+  {% if portrait %}<img class="portrait" src="{{ portrait }}" alt="">{% endif %}
+  <div class="who">
+    <div class="nm">{{ name }}</div>
+    <div class="sub">
+      <span>Lv <b>{{ level }}</b></span>
+      <span><b>{{ class_name }}</b></span>
+      <span>{{ server }}</span>
+      <span>装备 <b>{{ slots|length }}</b> 件</span>
+    </div>
+  </div>
+  <div class="power">
+    <div class="lb">战斗力</div>
+    <div class="vv">{{ combat_power }}</div>
+  </div>
+</div>
+
+{% if slots %}
+<div class="sec">
+  <div class="sec-t">装备面板</div>
+  <div class="en">
+    {% for s in slots %}
+    <div class="eq {{ s.grade }}">
+      {% if s.icon %}<img src="{{ s.icon }}" alt="">{% endif %}
+      <div class="eq-t">
+        <div class="eq-s">{{ s.slot }}{% if s.grade_label %} · {{ s.grade_label }}{% endif %}{% if not s.zh %}<span class="zh-miss">· 官方无中文</span>{% endif %}</div>
+        <div class="eq-n">{{ s.name }}</div>
+      </div>
+      {% if s.enchant %}<span class="eq-p">+{{ s.enchant }}</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if skins %}
+<div class="sec">
+  <div class="sec-t">时装外观<span class="cnt">{{ skins|length }} 件{% if skins_note %} · 官方未提供中文名{% endif %}</span></div>
+  <div class="en">
+    {% for s in skins %}
+    <div class="eq {{ s.grade }}">
+      {% if s.icon %}<img src="{{ s.icon }}" alt="">{% endif %}
+      <div class="eq-t">
+        <div class="eq-s">{{ s.slot }}</div>
+        <div class="eq-n">{{ s.name }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if companions %}
+<div class="sec">
+  <div class="sec-t">宠物与翅膀{% if companions_note %}<span class="cnt">{{ companions_note }}</span>{% endif %}</div>
+  <div class="en">
+    {% for c in companions %}
+    <div class="eq {{ c.grade }}">
+      {% if c.icon %}<img src="{{ c.icon }}" alt="">{% endif %}
+      <div class="eq-t">
+        <div class="eq-s">{{ c.slot }}</div>
+        <div class="eq-n">{{ c.name }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if skills %}
+<div class="sec">
+  <div class="sec-t">技能<span class="cnt">官方未提供中文名 · 展示 {{ skills|length }} / 共 {{ skill_total }} 个</span></div>
+  <div class="skills">
+    {% for sk in skills %}<span class="sk">{{ sk.name }}<b>Lv{{ sk.level }}</b></span>{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if note %}<div class="miss">{{ note }}</div>{% endif %}
+
+<div class="foot">
+  <span>数据来自 {{ region_label }} 官方站点</span>
+  <span>{{ fetched_at }}</span>
+</div>
+{% endblock %}

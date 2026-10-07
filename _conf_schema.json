@@ -1,0 +1,104 @@
+{
+  "region": {
+    "description": "查询区域",
+    "type": "string",
+    "default": "asia",
+    "options": ["nae", "naw", "eu", "sa", "asia"],
+    "hint": "国际服的五个分片。nae 美东、naw 美西、eu 欧服、sa 南美服、asia 日服。各分片的服务器与角色互相独立。"
+  },
+  "output_mode": {
+    "description": "输出形式",
+    "type": "string",
+    "default": "image",
+    "options": ["image", "text"],
+    "hint": "image 渲染为图片卡片（需要 AstrBot 的 Playwright 文转图），text 直接发纯文本。图片渲染失败时会自动回退为文本。"
+  },
+  "free_trigger": {
+    "description": "支持不带斜杠的写法",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后可以直接发「角色 mizoo」「服务器」，不用写斜杠。带参数的指令要求整条消息就是这个句式，不带参数的指令要求整条消息正好是那个词；群里若担心被闲聊触发可以关掉。"
+  },
+  "event_push": {
+    "description": "活动提醒",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后，时空裂隙与小游戏开场前会推送给订阅过的会话。提醒时刻表为本地推算，不依赖上游接口。某会话发「活动 订阅」才开始接收，「活动 退订」取消。"
+  },
+  "event_lead": {
+    "description": "提前推送分钟数",
+    "type": "int",
+    "default": 5,
+    "hint": "每场活动开始前多少分钟提醒，1–60。"
+  },
+  "event_remind_rift": {
+    "description": "提醒时空裂隙",
+    "type": "bool",
+    "default": true,
+    "hint": "每天 8 场，每 3 小时一次。"
+  },
+  "event_remind_minigame": {
+    "description": "提醒小游戏",
+    "type": "bool",
+    "default": true,
+    "hint": "每小时 :15 与 :45 各一场，一天 48 场；觉得吵可以关掉，只留裂隙。"
+  },
+  "quiet_start": {
+    "description": "静默时段开始",
+    "type": "string",
+    "default": "00:00",
+    "hint": "HH:MM，北京时间。默认 00:00–08:00 不推送。留空表示不静默。"
+  },
+  "quiet_end": {
+    "description": "静默时段结束",
+    "type": "string",
+    "default": "08:00",
+    "hint": "HH:MM，北京时间。可与开始时间跨零点，例如 23:30–09:00。留空表示不静默。"
+  },
+  "chinese_names": {
+    "description": "道具名反查中文",
+    "type": "bool",
+    "default": true,
+    "hint": "按道具 ID 从台服接口取中文（名称、品类、种族、外观、主属性名）。关闭后道具与装备名保持原文。"
+  },
+  "t2s": {
+    "description": "繁体转简体",
+    "type": "bool",
+    "default": true,
+    "hint": "台服译名是繁体，转换为简体后输出。"
+  },
+  "rate_limit": {
+    "description": "请求频率上限",
+    "type": "float",
+    "default": 5.0,
+    "hint": "每秒最多向上游发起的请求数。上游会限流，不建议调高。"
+  },
+  "request_timeout": {
+    "description": "请求超时（秒）",
+    "type": "int",
+    "default": 15
+  },
+  "cache_ttl": {
+    "description": "接口结果缓存（秒）",
+    "type": "int",
+    "default": 600,
+    "hint": "同一查询在缓存期内直接复用，避免群里多人重复查询时打满上游限流。"
+  },
+  "glossary_ttl": {
+    "description": "中文译名缓存（秒）",
+    "type": "int",
+    "default": 2592000,
+    "hint": "道具译名很少变化，默认缓存 30 天。"
+  },
+  "max_list_items": {
+    "description": "列表最多显示条数",
+    "type": "int",
+    "default": 10,
+    "hint": "角色搜索、公告列表等一次展示的上限。"
+  },
+  "image_width": {
+    "description": "卡片宽度（像素）",
+    "type": "int",
+    "default": 720
+  }
+}
