@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## v0.1.5
+
+修复基纳抓取在容器部署环境跑不起来的问题。
+
+- Linux 下给浏览器追加 --no-sandbox、--disable-dev-shm-usage、--disable-gpu
+  三个启动参数：容器里通常以 root 运行，Chrome 的沙箱在这种环境直接起不来；
+  容器的 /dev/shm 默认只有 64MB，不挪开会渲染到一半崩。Windows 不受影响
+- 服务器实测：容器内装好 playwright 与 Google Chrome 后，五大区双源
+  30.7 秒取到全量，行为与 Windows 一致
+- 离线测试补了启动参数断言，236 项
+
 ## v0.1.4
 
 新增基纳价格：每小时抓取各区在售挂单，按中位价渲染成一张图缓存下来，发「基纳」取图。

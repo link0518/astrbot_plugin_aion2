@@ -666,6 +666,18 @@ check("区间下限也不会被极值带偏", 5.0 < low <= 7.0, str(low))
 check("空列表返回三个零", kinah._stats([]) == (0.0, 0.0, 0.0))
 check("单条数据照样能算", kinah._stats([42.0]) == (42.0, 42.0, 42.0))
 
+# 容器里以 root 跑 Chrome 必须关沙箱，/dev/shm 也要挪开
+args = kinah._launch_args()
+check("启动参数带反自动化标记", "--disable-blink-features=AutomationControlled" in args, str(args))
+if sys.platform.startswith("linux"):
+    check(
+        "Linux 下关沙箱并挪开 /dev/shm",
+        "--no-sandbox" in args and "--disable-dev-shm-usage" in args,
+        str(args),
+    )
+else:
+    check("非 Linux 不动沙箱设置", "--no-sandbox" not in args, str(args))
+
 snap = kinah.Snapshot(
     fetched_at=1758000000.0,
     rate=6.7119,

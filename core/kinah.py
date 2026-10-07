@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import statistics
+import sys
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -345,7 +346,18 @@ def fetch_rate(timeout: float = 12.0) -> tuple[float, str]:
 
 PA_HOME = "https://www.playerauctions.com/zh/aion-2-kinah/"
 
-LAUNCH_ARGS = ["--disable-blink-features=AutomationControlled"]
+def _launch_args() -> list[str]:
+    """浏览器启动参数。
+
+    容器里通常以 root 运行，Chrome 的沙箱在这种环境下起不来，必须关掉；
+    容器的 /dev/shm 默认只有 64MB，不换地方会渲染到一半崩。
+    """
+    args = ["--disable-blink-features=AutomationControlled"]
+    if sys.platform.startswith("linux"):
+        args += ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+    return args
+
+
 CONTEXT_KW = {
     "user_agent": UA,
     "locale": "zh-CN",
@@ -362,7 +374,7 @@ def _open_browser(pw, profile_dir=None) -> tuple[Any, Any, str]:
     """
     last: Exception | None = None
     for channel in BROWSER_CHANNELS:
-        base = {"headless": True, "args": list(LAUNCH_ARGS)}
+        base = {"headless": True, "args": _launch_args()}
         if channel:
             base["channel"] = channel
         if profile_dir is not None:
