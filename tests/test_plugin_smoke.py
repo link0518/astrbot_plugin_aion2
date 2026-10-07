@@ -6,6 +6,7 @@
 import asyncio
 import importlib
 import json
+import re
 import sys
 import types
 from pathlib import Path
@@ -325,6 +326,35 @@ check(
 check(
     "每个接口都有说明",
     all(api["desc"] for api in console_routes.values()),
+)
+
+# 面板前端把 endpoint 直接拼在 Dashboard 的 extensions/<插件名>/ 之后，
+# 所以前端调用的名字必须等于注册路由去掉插件名前缀的部分。签名对不上时
+# 真实环境会返回「未找到该路由」，而纯 mock 测试是发现不了的。
+app_js = (PLUGIN_DIR / "pages" / "console" / "app.js").read_text(encoding="utf-8")
+called = set(re.findall(r'api\(\s*"(?:GET|POST)"\s*,\s*"([^"]+)"', app_js))
+called |= set(re.findall(r'apiGet\(API_BASE\s*\+\s*"([^"]+)"', app_js))
+unmatched = {
+    name for name in called if f"/astrbot_plugin_aion2/console/{name}" not in console_routes
+}
+check(
+    "前端调用的接口都能对上注册路由",
+    bool(called) and not unmatched,
+    f"对不上 {unmatched}" if unmatched else f"{len(called)} 个",
+)
+check(
+    "前端直调 bridge 时都带 API_BASE 前缀",
+    not re.search(r'bridge\.api(?:Get|Post)\(\s*"', app_js),
+)
+check(
+    "面板文件与 i18n 同时兼容 views/pages 两种名字",
+    '"views"' in (PLUGIN_DIR / ".astrbot-plugin" / "i18n" / "zh-CN.json").read_text(
+        encoding="utf-8"
+    )
+    and '"pages"' in (PLUGIN_DIR / ".astrbot-plugin" / "i18n" / "zh-CN.json").read_text(
+        encoding="utf-8"
+    )
+    and "AstrBotPluginView" in app_js,
 )
 
 print("\n== 板块与榜单选项 ==")

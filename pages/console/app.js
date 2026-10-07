@@ -1,8 +1,14 @@
 /* AION2 查询插件的控制台。
-   页面跑在 AstrBot WebUI 的受限 iframe 里，读写一律经由 window.AstrBotPluginPage，
+   页面跑在 AstrBot WebUI 的受限 iframe 里，读写一律经由 bridge 通信，
    不直接访问 cookie、localStorage 或父页面 DOM。 */
 
-const bridge = window.AstrBotPluginPage;
+/* 新版叫 AstrBotPluginView，旧版叫 AstrBotPluginPage，两个名字都试。 */
+const bridge = window.AstrBotPluginView || window.AstrBotPluginPage;
+
+/* 后端把接口注册在 /<插件名>/console/xxx 下，Dashboard 会把 endpoint 直接拼在
+   /api/v1/plugins/extensions/<插件名>/ 之后，所以这里必须带上 console/ 这一段，
+   少了它请求就落到未注册的路径上（表现为「未找到该路由」）。 */
+const API_BASE = "console/";
 
 const view = document.getElementById("view");
 const nav = document.getElementById("nav");
@@ -70,12 +76,13 @@ function showToast() {
   }, 2600);
 }
 
-/** 调一次后端接口，失败时提示并返回 null。 */
+/** 调一次后端接口，失败时提示并返回 null。endpoint 传 API_BASE 之后的部分。 */
 async function api(method, endpoint, payload) {
+  const path = API_BASE + endpoint;
   try {
     return method === "GET"
-      ? await bridge.apiGet(endpoint, payload)
-      : await bridge.apiPost(endpoint, payload);
+      ? await bridge.apiGet(path, payload)
+      : await bridge.apiPost(path, payload);
   } catch (error) {
     toast(error && error.message ? error.message : "请求失败", true);
     return null;
@@ -615,7 +622,7 @@ async function tick() {
   if (!bridge || app.tab !== "overview") return;
   let result = null;
   try {
-    result = await bridge.apiGet("state");
+    result = await bridge.apiGet(API_BASE + "state");
   } catch (error) {
     return;
   }

@@ -49,7 +49,18 @@ const DATA = __DATA__;
     return null;
   };
 
-  window.AstrBotPluginPage = {
+  // 后端把接口注册在 /<插件名>/console/ 下，Dashboard 会把 endpoint 直接拼在
+  // /api/v1/plugins/extensions/<插件名>/ 之后。这里照同样的语义校验，
+  // endpoint 少了 console/ 前缀就直接报错，免得漏改到真实环境才 404。
+  const route = (endpoint) => {
+    const path = String(endpoint);
+    if (!path.startsWith("console/")) {
+      throw new Error("endpoint 缺少 console/ 前缀，真实环境会 404：" + path);
+    }
+    return path.slice("console/".length);
+  };
+
+  const bridgeApi = {
     ready: async () => ({ pageTitle: "AION2 查询 · 控制台", isDark }),
     getContext: () => ({ isDark }),
     getLocale: () => "zh-CN",
@@ -57,15 +68,17 @@ const DATA = __DATA__;
     t: (key, fallback) => (fallback === undefined ? key : fallback),
     onContext: () => () => {},
     apiGet: async (endpoint, query = {}) => {
-      if (endpoint === "overview") return clone({ ...DATA, groups, subscriptions, state });
-      if (endpoint === "state") return { state: clone(state) };
-      if (endpoint === "schedule") {
+      const path = route(endpoint);
+      if (path === "overview") return clone({ ...DATA, groups, subscriptions, state });
+      if (path === "state") return { state: clone(state) };
+      if (path === "schedule") {
         return clone(query.day === "tomorrow" ? DATA.tomorrow : DATA.schedule);
       }
       throw new Error("预览未实现的接口：" + endpoint);
     },
     apiPost: async (endpoint, body = {}) => {
-      if (endpoint === "config") {
+      const path = route(endpoint);
+      if (path === "config") {
         const changed = [];
         for (const [key, value] of Object.entries(body.values || {})) {
           const field = findField(key);
@@ -75,7 +88,7 @@ const DATA = __DATA__;
         }
         return clone({ saved: body.values, changed, groups, state });
       }
-      if (endpoint === "reset") {
+      if (path === "reset") {
         const keys = body.keys || [];
         for (const key of keys) {
           const field = findField(key);
@@ -83,23 +96,26 @@ const DATA = __DATA__;
         }
         return clone({ reset: keys, changed: keys, groups, state });
       }
-      if (endpoint === "cache/clear") {
+      if (path === "cache/clear") {
         state.cache.entries = 0;
         if (body.scope !== "result") state.cache.glossary = 0;
         return clone({ removed: 14, scope: body.scope, state });
       }
-      if (endpoint === "selftest") {
+      if (path === "selftest") {
         return clone({ ok: true, region: "日服", servers: 36, ms: 218, state });
       }
-      if (endpoint === "subscriptions/remove") {
+      if (path === "subscriptions/remove") {
         subscriptions = subscriptions.filter((row) => row.target !== body.target);
         state.push.subscribers = subscriptions.length;
         return clone({ removed: body.target, subscriptions, state });
       }
-      if (endpoint === "subscriptions/test") return clone({ sent: body.target });
+      if (path === "subscriptions/test") return clone({ sent: body.target });
       throw new Error("预览未实现的接口：" + endpoint);
     },
   };
+
+  window.AstrBotPluginView = bridgeApi;
+  window.AstrBotPluginPage = bridgeApi;
 })();
 """
 
