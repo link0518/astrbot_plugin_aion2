@@ -9,7 +9,9 @@ desc: >
   角色、装备、道具、公告等指令带不带斜杠都能触发。
   另外内置活动时刻表（时空裂隙、小游戏），可订阅开场前的提醒。
   插件在 WebUI 里自带控制台页面：改配置、看运行状态、管理提醒订阅、预览时刻表。
-version: v0.1.0
+version: v0.1.1
 author: WorkBuddy
 repo: "https://github.com/link0518/astrbot_plugin_aion2"
+# 查询功能自 4.5.1 起即可用；控制台页面依赖 Plugin Pages（4.24.1 引入），
+# 更低版本上插件仍能加载与查询，只是没有这个页面
 astrbot_version: ">=4.5.1"

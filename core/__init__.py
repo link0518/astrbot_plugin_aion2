@@ -10,7 +10,6 @@ from .errors import (
     NoSeason,
     NotFound,
     RateLimited,
-    RegionError,
     UpstreamError,
 )
 from .models import (
@@ -61,7 +60,6 @@ __all__ = [
     "REGIONS",
     "RateLimited",
     "RateLimiter",
-    "RegionError",
     "Routes",
     "Server",
     "Skill",

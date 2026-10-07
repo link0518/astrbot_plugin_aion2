@@ -4,6 +4,7 @@
 道具与装备名按 id 从台服取中文，取不到就保留上游英文名。
 """
 
+import re
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
@@ -36,6 +37,10 @@ env = Environment(
 
 # 装备卡片上最多展示的技能数，避免技能多的角色把图拉得过长
 MAX_SKILLS = 18
+
+# 技能名来自上游原文（国际服英文、台服繁中），没有译名来源，
+# 只能按是否含中日韩汉字判断中文名有没有
+_CJK = re.compile(r"[\u4e00-\u9fff]")
 
 
 def _now() -> str:
@@ -189,6 +194,7 @@ async def equipment_context(
                 "name": localized(s.name),
                 "level": s.level,
                 "category": skill_category(s.category),
+                "zh": bool(_CJK.search(s.name)),
             }
             for s in skills[:MAX_SKILLS]
         ],
@@ -259,7 +265,7 @@ async def item_context(
 # ------------------------------------------------------------ 纯文本回退
 
 
-def character_text(client: Aion2Client, ch: Character) -> str:
+def character_text(ch: Character) -> str:
     p = ch.profile
     lines = [
         f"【{localized(p.name)}】{server_name(p.server_name)}",
@@ -302,6 +308,12 @@ async def equipment_text(client: Aion2Client, equip: Equipment, profile: Profile
         name = names.get(s.item_id) or localized(s.name)
         enchant = f" +{s.enchant_level}" if s.enchant_level else ""
         lines.append(f"  {slot_name(s.slot_pos_name)}：{name}{enchant}")
+    if equip.skins:
+        lines.append("")
+        lines.append("时装外观")
+        for s in equip.skins:
+            name = names.get(s.item_id) or localized(s.name)
+            lines.append(f"  {slot_name(s.slot_pos_name)}：{name}")
     for label, wing in (("宠物", equip.pet), ("翅膀", equip.wing), ("翅膀外观", equip.wing_skin)):
         if wing is not None:
             name = names.get(wing.id) or localized(wing.name)
@@ -316,7 +328,7 @@ async def equipment_text(client: Aion2Client, equip: Equipment, profile: Profile
     return "\n".join(lines)
 
 
-async def item_text(client: Aion2Client, item: Item, profile_name: str = "") -> str:
+async def item_text(client: Aion2Client, item: Item) -> str:
     info = await client.item_zh(item.id)
     zh_name = localized(str(info.get("name") or ""))
     zh_stats = _zh_stat_names(info)
@@ -403,7 +415,7 @@ def events_text(now: datetime | None = None, *, tomorrow: bool = False) -> str:
     return events.text_table(now, tomorrow=tomorrow)
 
 
-def search_text(client: Aion2Client, page) -> str:
+def search_text(page) -> str:
     if not page.items:
         return "没有找到匹配的角色。"
     lines = [f"共 {page.total} 条，第 {page.page}/{page.last_page} 页："]

@@ -7,7 +7,7 @@ import importlib
 import json
 import sys
 import types
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 PLUGIN_DIR = Path(__file__).resolve().parent.parent
@@ -291,10 +291,16 @@ async def card_checks():
 
     etext = await render.equipment_text(stub, eq, ch.profile)
     check("装备文本回退", "主手武器" in etext, etext[:60])
+    check("装备文本含时装外观", "时装外观" in etext and len(eq.skins) == 8, etext[:120])
+    check(
+        "技能名标注是否有中文",
+        ectx["skills"] and all("zh" in s for s in ectx["skills"]),
+        str(ectx["skills"][:1]),
+    )
     itext = await render.item_text(stub, item)
     check("道具文本反查并转简体", "训练用巨剑" in itext, itext[:40])
     check("道具文本属性中文化", "攻击力" in itext, itext[:120])
-    stext = render.search_text(stub, page)
+    stext = render.search_text(page)
     check("搜索文本回退", "共 10000 条" in stext, stext[:40])
     check(
         "搜索候选带职业与种族",
@@ -589,6 +595,45 @@ check("每项都有说明与提示", all(f["label"] and f["type"] for g in group
 check(
     "越界的历史值会被报出来",
     panel.normalize({"event_lead": 999}, schema)["issues"][0]["key"] == "event_lead",
+)
+
+print("\n== 缓存与时间 ==")
+cache = importlib.import_module("aion2_plugin.core.cache")
+OUT = PLUGIN_DIR / "tests" / "out"
+
+ttl_cache = cache.TTLCache(ttl=600, max_entries=3)
+for i in range(5):
+    ttl_cache.set(f"k{i}", i)
+check(
+    "结果缓存超出容量丢掉最旧的",
+    len(ttl_cache) == 3 and ttl_cache.get("k0") is None and ttl_cache.get("k4") == 4,
+    f"{len(ttl_cache)} 条",
+)
+ttl_cache.set("soon", "v", ttl=-1)
+ttl_cache.purge()
+check("purge 清掉过期条目", ttl_cache.get("soon") is None)
+
+store = cache.GlossaryStore(OUT / "tmp_cache.json", ttl=600, max_entries=2)
+store.set("a", 1)
+store.set("b", 2)
+store.set("c", 3)
+check("译名缓存也有容量上限", len(store) == 2 and store.get("a") is None, str(len(store)))
+
+store2 = cache.GlossaryStore(OUT / "tmp_cache2.json", ttl=600)
+store2.set("live", 1)
+store2._data["stale"] = [0, 2]
+check("keys 不带出过期条目", store2.keys() == ["live"], str(store2.keys()))
+
+store3 = cache.GlossaryStore(OUT / "tmp_cache3.json", ttl=600)
+store3.set("zero", 0)
+store3._dirty = False
+store3.set("zero", 0)
+check("重复写同值不标脏", store3._dirty is False)
+
+check(
+    "公告时间换算成北京时间",
+    posts[0].posted_at.utcoffset() == timedelta(hours=8),
+    str(posts[0].posted_at),
 )
 
 print(f"\n结果：{len(PASS)} 项通过，{len(FAIL)} 项失败")

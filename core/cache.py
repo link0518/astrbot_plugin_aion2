@@ -10,10 +10,15 @@ from typing import Any
 
 
 class TTLCache:
-    """按 key 缓存任意值，超过存活时间即失效。"""
+    """按 key 缓存任意值，超过存活时间即失效。
 
-    def __init__(self, ttl: int = 600):
+    缓存的 key 带着搜索词与角色 id，长期挂在群里几乎不会重复命中，
+    因此除了 TTL 还要有容量上限，否则内存只增不减。
+    """
+
+    def __init__(self, ttl: int = 600, max_entries: int = 2000):
         self.ttl = max(1, int(ttl))
+        self.max_entries = max(1, int(max_entries))
         self._data: dict[str, tuple[float, Any]] = {}
 
     def get(self, key: str) -> Any | None:
@@ -28,6 +33,9 @@ class TTLCache:
 
     def set(self, key: str, value: Any, ttl: int | None = None) -> None:
         self._data[key] = (time.monotonic() + (ttl or self.ttl), value)
+        if len(self._data) > self.max_entries:
+            self.purge()
+            self._evict(len(self._data) - self.max_entries)
 
     def clear(self) -> None:
         self._data.clear()
@@ -37,16 +45,26 @@ class TTLCache:
         for key in [k for k, (exp, _) in self._data.items() if exp < now]:
             self._data.pop(key, None)
 
+    def _evict(self, count: int) -> None:
+        """超出容量时按插入顺序丢掉最旧的条目。"""
+        for key in list(self._data)[: max(0, count)]:
+            self._data.pop(key, None)
+
     def __len__(self) -> int:
         return len(self._data)
 
 
 class GlossaryStore:
-    """中文译名的持久缓存，键为 "<类别>:<id>"。"""
+    """中文译名的持久缓存，键为 "<类别>:<id>"。
 
-    def __init__(self, path: Path, ttl: int = 2592000):
+    活动订阅、已推记录也复用它，所以同样要有容量上限：
+    已推记录的键（每场活动一个）过期后不会有人再去读，只能靠淘汰回收。
+    """
+
+    def __init__(self, path: Path, ttl: int = 2592000, max_entries: int = 5000):
         self.path = path
         self.ttl = max(60, int(ttl))
+        self.max_entries = max(1, int(max_entries))
         self._data: dict[str, list] = {}
         self._loaded = False
         self._dirty = False
@@ -78,10 +96,13 @@ class GlossaryStore:
 
     def set(self, key: str, value: Any) -> None:
         self._load()
-        if self._data.get(key) and self._data[key][1] == value:
+        if key in self._data and self._data[key][1] == value:
             return
         self._data[key] = [time.time(), value]
         self._dirty = True
+        if len(self._data) > self.max_entries:
+            self._drop_expired()
+            self._evict(len(self._data) - self.max_entries)
 
     def remove(self, key: str) -> None:
         """删掉一个键，用于退订这类取消操作。"""
@@ -90,8 +111,12 @@ class GlossaryStore:
             self._dirty = True
 
     def keys(self) -> list[str]:
-        """当前存下来的全部键，用于遍历订阅这类集合型数据。"""
+        """当前有效的全部键，用于遍历订阅这类集合型数据。
+
+        顺带清掉过期条目，否则这些不会再被读到的键会一直留着。
+        """
         self._load()
+        self._drop_expired()
         return list(self._data)
 
     def clear(self) -> None:
@@ -100,6 +125,19 @@ class GlossaryStore:
         if self._data:
             self._data = {}
             self._dirty = True
+
+    def _drop_expired(self) -> None:
+        now = time.time()
+        stale = [k for k, (saved_at, _) in self._data.items() if now - saved_at > self.ttl]
+        for key in stale:
+            self._data.pop(key, None)
+        if stale:
+            self._dirty = True
+
+    def _evict(self, count: int) -> None:
+        """超出容量时按插入顺序丢掉最旧的条目。"""
+        for key in list(self._data)[: max(0, count)]:
+            self._data.pop(key, None)
 
     def save(self) -> None:
         if not self._dirty:

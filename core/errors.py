@@ -15,10 +15,6 @@ class Aion2Error(Exception):
         return self.message
 
 
-class RegionError(Aion2Error):
-    message = "未知的查询区域"
-
-
 class NotFound(Aion2Error):
     message = "没有找到对应数据"
 
@@ -58,7 +54,6 @@ STATUS_MAP = {
 
 
 def from_status(status: int, detail: str = "") -> Aion2Error:
-    cls = STATUS_MAP.get(status)
-    if cls is None:
-        cls = UpstreamError if status >= 500 else UpstreamError
+    """把 HTTP 状态码映射成异常，未列举的状态（含 5xx）一律算上游异常。"""
+    cls = STATUS_MAP.get(status, UpstreamError)
     return cls(detail or f"HTTP {status}")

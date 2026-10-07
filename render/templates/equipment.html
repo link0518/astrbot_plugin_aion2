@@ -71,9 +71,9 @@
 
 {% if skills %}
 <div class="sec">
-  <div class="sec-t">技能<span class="cnt">官方未提供中文名 · 展示 {{ skills|length }} / 共 {{ skill_total }} 个</span></div>
+  <div class="sec-t">技能<span class="cnt">展示 {{ skills|length }} / 共 {{ skill_total }} 个</span></div>
   <div class="skills">
-    {% for sk in skills %}<span class="sk">{{ sk.name }}<b>Lv{{ sk.level }}</b></span>{% endfor %}
+    {% for sk in skills %}<span class="sk">{{ sk.name }}{% if not sk.zh %}<span class="zh-miss">· 官方无中文</span>{% endif %}<b>Lv{{ sk.level }}</b></span>{% endfor %}
   </div>
 </div>
 {% endif %}

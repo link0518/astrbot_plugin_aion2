@@ -170,10 +170,10 @@ class Aion2Plugin(Star):
             self._event_task = None
 
     def _build_client(self) -> Aion2Client:
-        region = str(self.config.get("region", "nae")).strip().lower()
+        region = str(self.config.get("region", "asia")).strip().lower()
         if region not in REGIONS:
-            logger.warning(f"未知的查询区域 {region}，回退到 nae")
-            region = "nae"
+            logger.warning(f"未知的查询区域 {region}，回退到 asia")
+            region = "asia"
         return Aion2Client(
             region_key=region,
             rate_limit=float(self.config.get("rate_limit", 5.0)),
@@ -245,7 +245,7 @@ class Aion2Plugin(Star):
     def status(self) -> dict:
         """运行状态快照，供配置面板展示。"""
         now = datetime.now()
-        region_key = str(self.config.get("region", "nae")).strip().lower()
+        region_key = str(self.config.get("region", "asia")).strip().lower()
         region = REGIONS.get(region_key)
         client = self.peek_client()
         cache = (
@@ -270,6 +270,8 @@ class Aion2Plugin(Star):
                 }
             )
         task = self._event_task
+        # 已推记录的键是「事件@日期时间」，按当天的日期片段统计今日已推
+        today_tag = f"@{now:%Y-%m-%d}"
         return {
             "now": f"{now:%Y-%m-%d %H:%M:%S}",
             "region": {"key": region_key, "label": region.label if region else region_key},
@@ -281,7 +283,13 @@ class Aion2Plugin(Star):
                 "quietNow": self._in_quiet(now),
                 "running": task is not None and not task.done(),
                 "subscribers": len(self.subscribers()),
-                "sent": len([k for k in self._sent.keys() if k.startswith(SENT_KEY)]),
+                "sent": len(
+                    [
+                        k
+                        for k in self._sent.keys()
+                        if k.startswith(SENT_KEY) and today_tag in k
+                    ]
+                ),
             },
             "cache": {
                 "entries": cache["entries"],
@@ -363,8 +371,12 @@ class Aion2Plugin(Star):
         except (TypeError, ValueError):
             return 10
 
-    async def _emit(self, event: AstrMessageEvent, kind: str, ctx: dict, text: str):
-        """按配置输出卡片，渲染不可用时回退纯文本。"""
+    async def _emit(self, event: AstrMessageEvent, kind: str, ctx: dict, text):
+        """按配置输出卡片，渲染不可用时回退纯文本。
+
+        text 可以传字符串，也可以传返回字符串的可调用对象：图片模式下用不到
+        纯文本，延迟到回退时才计算，省掉一次多余的取数。
+        """
         if self._image_mode():
             try:
                 html = render.render(kind, ctx)
@@ -372,7 +384,11 @@ class Aion2Plugin(Star):
                 return event.image_result(url)
             except Exception as exc:  # noqa: BLE001 - 渲染失败不影响查询本身
                 logger.warning(f"卡片渲染失败，回退为文本输出：{exc}")
-        return event.plain_result(text)
+        if callable(text):
+            text = text()
+            if asyncio.iscoroutine(text):
+                text = await text
+        return event.plain_result(str(text))
 
     # ------------------------------------------------------------ 角色定位
 
@@ -483,15 +499,19 @@ class Aion2Plugin(Star):
         ctx = await render.character_context(
             self.client, ch, width=self._width(), note=self._capability_note()
         )
-        yield await self._emit(event, "character", ctx, render.character_text(self.client, ch))
+        yield await self._emit(event, "character", ctx, lambda: render.character_text(ch))
 
     async def _render_equipment(self, event: AstrMessageEvent, summary):
         ref = self._ref(summary)
         ch = await self.client.character(ref)
         equip = await self.client.equipment(ref)
         ctx = await render.equipment_context(self.client, equip, ch.profile, width=self._width())
-        text = await render.equipment_text(self.client, equip, ch.profile)
-        yield await self._emit(event, "equipment", ctx, text)
+        yield await self._emit(
+            event,
+            "equipment",
+            ctx,
+            lambda: render.equipment_text(self.client, equip, ch.profile),
+        )
 
     async def _locate(self, keyword: str, server_id: int = 0):
         """定位角色。唯一匹配返回摘要，否则返回 None 与候选页。
@@ -630,8 +650,9 @@ class Aion2Plugin(Star):
         try:
             detail = await self.client.item(item_id)
             ctx = await render.item_context(self.client, detail, width=self._width())
-            text = await render.item_text(self.client, detail)
-            yield await self._emit(event, "item", ctx, text)
+            yield await self._emit(
+                event, "item", ctx, lambda: render.item_text(self.client, detail)
+            )
         except Aion2Error as exc:
             yield event.plain_result(f"查询失败：{exc.hint}（{exc.detail}）")
 
@@ -693,6 +714,8 @@ class Aion2Plugin(Star):
         for e in entries[: self._limit()]:
             name = clean_text(str(e.get("characterName", "")))
             lines.append(f"  {e.get('rank')}. {localized(name)}")
+        lines.append("")
+        lines.append("榜单按服务器统计，这里展示的是该区域的第一个服务器。")
         yield event.plain_result("\n".join(lines))
 
     # --------------------------------------------------- 活动时刻表与提醒
@@ -907,7 +930,7 @@ class Aion2Plugin(Star):
         except Aion2Error as exc:
             yield event.plain_result(f"查询失败：{exc.hint}")
             return
-        yield event.plain_result(render.search_text(self.client, page))
+        yield event.plain_result(render.search_text(page))
 
     @filter.llm_tool(name="aion2_character")
     async def tool_character(self, event: AstrMessageEvent, keyword: str, server_id: int = 0):
@@ -960,7 +983,7 @@ class Aion2Plugin(Star):
             detail = await self.client.item(int(item_id))
             ctx = await render.item_context(self.client, detail, width=self._width())
             yield await self._emit(
-                event, "item", ctx, await render.item_text(self.client, detail)
+                event, "item", ctx, lambda: render.item_text(self.client, detail)
             )
         except Aion2Error as exc:
             yield event.plain_result(f"查询失败：{exc.hint}（{exc.detail}）")
@@ -994,9 +1017,9 @@ class Aion2Plugin(Star):
         Args:
             board(string): 板块，notice 公告、update 更新公告、cm_story 开发日志
         """
-        key = (board or "notice").strip().lower()
-        if key not in BOARDS:
-            yield event.plain_result(f"未知板块。可选：{'、'.join(BOARDS.keys())}")
+        key = _resolve_option(board or "notice", BOARDS)
+        if not key:
+            yield event.plain_result(f"未知板块。可选：{_option_hint(BOARDS)}")
             return
         try:
             rows = await self.client.posts(key, self._limit())

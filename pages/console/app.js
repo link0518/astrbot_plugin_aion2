@@ -46,13 +46,28 @@ function el(tag, props = {}, children = []) {
 }
 
 let toastTimer = 0;
+const toastQueue = [];
 
+/* 排队显示，避免连续的两次提示互相顶掉（保存后往往还要补一条说明）。 */
 function toast(message, isError = false) {
-  toastEl.textContent = message;
-  toastEl.classList.toggle("err", Boolean(isError));
+  toastQueue.push({ message, isError });
+  if (!toastTimer) showToast();
+}
+
+function showToast() {
+  const item = toastQueue.shift();
+  if (!item) {
+    toastTimer = 0;
+    return;
+  }
+  toastEl.textContent = item.message;
+  toastEl.classList.toggle("err", Boolean(item.isError));
   toastEl.classList.add("show");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2800);
+  toastTimer = setTimeout(() => {
+    toastEl.classList.remove("show");
+    if (toastQueue.length) toastTimer = setTimeout(showToast, 180);
+    else toastTimer = 0;
+  }, 2600);
 }
 
 /** 调一次后端接口，失败时提示并返回 null。 */

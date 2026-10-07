@@ -1084,6 +1084,24 @@ async def run_console():
     check("状态含提醒配置", state["push"]["lead"] == 5 and state["push"]["enabled"] is True)
     check("状态含缓存条数", "glossary" in state["cache"] and "entries" in state["cache"])
 
+    # 面板标的「今日已推」要按当天统计，历史记录不能算进来
+    from datetime import datetime as dt2
+
+    for key in list(panel_plugin._sent.keys()):
+        panel_plugin._sent.remove(key)
+    panel_plugin._sent.set("sent:rift@2020-01-01T00:00", 1)
+    check(
+        "历史已推不计入今日",
+        panel_plugin.status()["push"]["sent"] == 0,
+        str(panel_plugin.status()["push"]["sent"]),
+    )
+    panel_plugin._sent.set(f"sent:rift@{dt2.now():%Y-%m-%d}T00:00", 1)
+    check(
+        "今日已推按当天统计",
+        panel_plugin.status()["push"]["sent"] == 1,
+        str(panel_plugin.status()["push"]["sent"]),
+    )
+
     print("\n== 配置面板：旧版本降级 ==")
     webapi_module = importlib.import_module("aion2_plugin.webapi")
     saved_json = webapi_module.json_response

@@ -7,10 +7,13 @@
 import html
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 PORTRAIT_ORIGIN = "https://profileimg.plaync.com"
+
+# 上游时间戳是 UTC，而插件面向的用户与活动时刻表都按北京时间，统一换算过来
+BEIJING = timezone(timedelta(hours=8))
 
 # 上游会在搜索命中的片段外包一层高亮标签，直接输出会把标签发给用户
 _TAG = re.compile(r"<[^>]*>")
@@ -48,8 +51,14 @@ def _text(raw: Any, key: str, default: str = "") -> str:
 
 
 def _epoch(raw: Any, key: str) -> datetime | None:
+    """取一个秒级时间戳，换算成北京时间交给展示层。
+
+    按 UTC 解释原始值后转东八区，否则北京时间凌晨发布的公告会整体差一天。
+    另外上游这个字段并不总是发布时间（维护公告会给出尚未到来的时刻），
+    展示时只当时间戳用，不要写成「发布于」。
+    """
     seconds = _int(raw, key, 0)
-    return datetime.fromtimestamp(seconds, tz=timezone.utc) if seconds > 0 else None
+    return datetime.fromtimestamp(seconds, tz=BEIJING) if seconds > 0 else None
 
 
 def _portrait(url: str) -> str:
@@ -242,6 +251,8 @@ class Profile:
     race_name: str = ""
     server_id: int = 0
     server_name: str = ""
+    # 上游字段名为 regionName，实测同一服务器上不同角色取值不同（有值也有空），
+    # 是按角色的军团名，不是地区
     guild_name: str = ""
     combat_power: int = 0
     title_name: str = ""

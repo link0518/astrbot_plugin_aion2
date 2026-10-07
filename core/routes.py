@@ -16,7 +16,6 @@ class Region:
     default_locale: str
     community: str  # 社区板块独立域名
     board_suffix: str  # 板块别名后缀，上游按语言拼在别名后面
-    dict: str  # 道具字典前缀，空串表示该区没有字典
     search: str  # 角色搜索接口
     prefix: str = ""  # 站点下的接口前缀，台服是 /aion2，国际服没有
 
@@ -30,7 +29,6 @@ REGIONS: dict[str, Region] = {
         default_locale="en-US",
         community="https://api-global-community.plaync.com/aion2_global",
         board_suffix="_en",
-        dict="",
         search="https://api-search.plaync.com/aion2global/search/v2",
     ),
     "naw": Region(
@@ -41,7 +39,6 @@ REGIONS: dict[str, Region] = {
         default_locale="en-US",
         community="https://api-global-community.plaync.com/aion2_global",
         board_suffix="_en",
-        dict="",
         search="https://api-search.plaync.com/aion2global/search/v2",
     ),
     "eu": Region(
@@ -52,7 +49,6 @@ REGIONS: dict[str, Region] = {
         default_locale="en-US",
         community="https://api-global-community.plaync.com/aion2_global",
         board_suffix="_en",
-        dict="",
         search="https://api-search.plaync.com/aion2global/search/v2",
     ),
     "sa": Region(
@@ -63,7 +59,6 @@ REGIONS: dict[str, Region] = {
         default_locale="en-US",
         community="https://api-global-community.plaync.com/aion2_global",
         board_suffix="_en",
-        dict="",
         search="https://api-search.plaync.com/aion2global/search/v2",
     ),
     "asia": Region(
@@ -74,7 +69,6 @@ REGIONS: dict[str, Region] = {
         default_locale="en-US",
         community="https://api-global-community.plaync.com/aion2_global",
         board_suffix="_en",
-        dict="",
         search="https://api-search.plaync.com/aion2global/search/v2",
     ),
     "tw": Region(
@@ -85,7 +79,6 @@ REGIONS: dict[str, Region] = {
         default_locale="zh-TW",
         community="https://api-tw-community.ncsoft.com/aion2_tw",
         board_suffix="_zh",
-        dict="/aion2_tw/v2.0",
         search="https://tw.ncsoft.com/aion2/api/search",
         prefix="/aion2",
     ),
@@ -97,14 +90,11 @@ GLOSSARY_REGION = "tw"
 # 游戏数据接口，按语言分路径
 P_SERVERS = "/api/gameinfo/servers"
 P_CLASSES = "/api/gameinfo/classes"
-P_PC_DATA = "/api/gameinfo/pcdata"
 P_ITEM = "/api/gameconst/item"
 
 # 角色与排行接口，不带语言前缀
 P_CHARACTER = "/api/character/info"
 P_EQUIPMENT = "/api/character/equipment"
-P_EQUIPPED_ITEM = "/api/character/equipment/item"
-P_DAEVANION = "/api/character/daevanion/detail"
 P_RANKING = "/api/ranking/list"
 
 # 角色搜索的路径，前缀已在 Region.search 里
@@ -157,6 +147,7 @@ class Routes:
     def __init__(self, region: Region):
         self.region = region
         self.locale = region.default_locale
+        # 语言路径必须小写：上游对 /en-US/ 会 302 到错误页，/en-us/ 才正常
         self._loc = f"/{self.locale.lower()}" if region.shard else ""
         self._shard = {"region": region.shard} if region.shard else {}
 
@@ -171,13 +162,10 @@ class Routes:
     def search(self, path: str) -> str:
         return f"{self.region.search}{path}"
 
-    def lexicon(self, path: str) -> str:
-        """道具字典接口，只有台服提供。"""
-        return f"{self.region.site}{self.region.dict}{path}"
-
     def board(self, alias: str, path: str = "") -> str:
         name = f"{alias}{self.region.board_suffix}"
         return f"{self.region.community}/board/{name}{path}"
+
     def site_params(self) -> dict[str, str]:
         """站点通用参数：语言，国际服另加分片。"""
         params = {"lang": self.locale}

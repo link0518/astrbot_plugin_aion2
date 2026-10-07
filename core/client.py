@@ -25,8 +25,6 @@ from .errors import (
 from .models import (
     Character,
     CharacterRef,
-    CharacterSummary,
-    DaevanionSummary,
     Equipment,
     GameClass,
     Item,
@@ -73,7 +71,7 @@ class Aion2Client:
     def __init__(
         self,
         *,
-        region_key: str = "nae",
+        region_key: str = "asia",
         rate_limit: float = 5.0,
         timeout: int = 15,
         cache_ttl: int = 600,
@@ -208,7 +206,7 @@ class Aion2Client:
         raw = await self._get(
             self.routes.search(R.P_SEARCH_CHARACTER),
             params,
-            cache_key=f"{self.region.key}:search:{keyword}:{race_id}:{server_id}:{page}:{size}",
+            cache_key=f"{self.region.key}:search:{keyword.strip()}:{race_id}:{server_id}:{page}:{size}",
         )
         return Page.from_raw(raw)
 
@@ -241,18 +239,6 @@ class Aion2Client:
         if gear is None and skills is None:
             raise NotFound("该角色没有装备数据")
         return Equipment.from_raw(raw)
-
-    async def daevanion(self, ref: CharacterRef, board_id: int) -> dict[str, Any]:
-        params = self._character_params(ref)
-        params["boardId"] = board_id
-        raw = await self._get(
-            self.routes.api(R.P_DAEVANION),
-            params,
-            cache_key=f"{self.region.key}:dv:{ref.server_id}:{ref.character_id}:{board_id}",
-        )
-        if not raw.get("nodeList") and not raw.get("nodes"):
-            raise NotFound(f"守护者板 {board_id}")
-        return raw
 
     # -------------------------------------------------------------- 排行
 
@@ -357,11 +343,6 @@ class Aion2Client:
         self._glossary.set(key, info)
         return info
 
-    async def item_name_zh(self, item_id: int) -> str:
-        """按道具 id 取中文名，失败返回空串（调用方保留原有英文名）。"""
-        info = await self.item_zh(item_id)
-        return str(info.get("name") or "")
-
     async def item_names_zh(self, item_ids: list[int], concurrency: int = 8) -> dict[int, str]:
         """批量取中文名。请求仍按限流器排队，只是并发等待以缩短总耗时。"""
         ids = [i for i in dict.fromkeys(item_ids) if i > 0]
@@ -371,7 +352,8 @@ class Aion2Client:
 
         async def one(item_id: int) -> tuple[int, str]:
             async with gate:
-                return item_id, await self.item_name_zh(item_id)
+                info = await self.item_zh(item_id)
+                return item_id, str(info.get("name") or "")
 
         results = await asyncio.gather(*(one(i) for i in ids))
         return {item_id: name for item_id, name in results if name}
