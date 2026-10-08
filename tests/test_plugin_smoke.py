@@ -622,12 +622,12 @@ async def run_commands():
         pass
     check("状态显示已订阅", any("已订阅" in t for t in ev.plain), str(ev.plain)[:40])
 
-    # 到点推送：16:55 命中 17:00 的裂隙
+    # 到点推送：16:55 同时命中 17:00 的裂隙与小游戏（整点场）
     ctx.sent.clear()
     sent = await plugin.push_due(dt(2026, 10, 7, 16, 55))
-    check("到点推送到订阅会话", sent == 1 and len(ctx.sent) == 1, str(sent))
+    check("到点推送到订阅会话", sent == 2 and len(ctx.sent) == 2, str(sent))
     check("推给的是会话标识", bool(ctx.sent) and ctx.sent[0][0] == "g1", str(ctx.sent[:1]))
-    pushed = ctx.sent[0][1].parts[0] if ctx.sent else ""
+    pushed = "\n".join(chain.parts[0] for _, chain in ctx.sent)
     check(
         "推送含裂隙与小游戏",
         "时空裂隙" in pushed and "小游戏" in pushed,
@@ -640,19 +640,19 @@ async def run_commands():
     check("同一场不重发", sent == 0 and not ctx.sent, str(sent))
 
     ctx.sent.clear()
-    sent = await plugin.push_due(dt(2026, 10, 7, 16, 10))
-    check("小游戏窗口也推送", sent == 1 and len(ctx.sent) == 1, str(sent))
+    sent = await plugin.push_due(dt(2026, 10, 7, 15, 55))
+    check("整点前 5 分钟命中整点小游戏", sent == 1 and len(ctx.sent) == 1, str(sent))
 
     # 静默时段
     cfg["quiet_start"] = "16:00"
     cfg["quiet_end"] = "17:00"
     ctx.sent.clear()
-    sent = await plugin.push_due(dt(2026, 10, 7, 16, 40))
+    sent = await plugin.push_due(dt(2026, 10, 7, 16, 55))
     check("静默时段不推送", sent == 0 and not ctx.sent, str(sent))
     cfg["quiet_start"] = "00:00"
     cfg["quiet_end"] = "08:00"
-    sent = await plugin.push_due(dt(2026, 10, 7, 16, 40))
-    check("静默解除后照常推", sent == 1, str(sent))
+    sent = await plugin.push_due(dt(2026, 10, 7, 19, 55))
+    check("静默解除后照常推", sent == 2, str(sent))
     cfg["quiet_start"] = ""
     cfg["quiet_end"] = ""
     check("留空表示不静默", plugin._quiet_range() is None)
@@ -1219,6 +1219,38 @@ async def run_console():
     STUB_REQUEST.json_body = {"values": {"glossary_ttl": 7200}}
     await console.save_config()
     check("译名缓存时长跟着改", panel_plugin._glossary.ttl == 7200, str(panel_plugin._glossary.ttl))
+
+    print("\n== 配置面板：自定义时刻表 ==")
+    check(
+        "默认小游戏每小时整点一场",
+        panel_plugin._schedule().minigame_minutes == (0,),
+        str(panel_plugin._schedule().minigame_minutes),
+    )
+    STUB_REQUEST.json_body = {"values": {"event_minigame_minutes": "15,45"}}
+    res = await console.save_config()
+    check("面板可改小游戏分钟", res["kind"] == "json", str(res.get("payload")))
+    check(
+        "改完立即生效",
+        panel_plugin._schedule().minigame_minutes == (15, 45),
+        str(panel_plugin._schedule().minigame_minutes),
+    )
+    STUB_REQUEST.json_body = {"values": {"event_rift_hours": "1,13"}}
+    await console.save_config()
+    check(
+        "面板可改裂隙小时",
+        panel_plugin._schedule().rift_hours == (1, 13),
+        str(panel_plugin._schedule().rift_hours),
+    )
+    STUB_REQUEST.json_body = {"values": {"event_minigame_minutes": "99"}}
+    res = await console.save_config()
+    check("越界分钟被拒", res["kind"] == "error", str(res.get("payload")))
+    STUB_REQUEST.json_body = {"values": {"event_minigame_minutes": "0", "event_rift_hours": "2,5,8,11,14,17,20,23"}}
+    await console.save_config()
+    check(
+        "改回默认",
+        panel_plugin._schedule().minigame_minutes == (0,)
+        and panel_plugin._schedule().rift_hours[0] == 2,
+    )
 
     print("\n== 配置面板：订阅与缓存 ==")
     panel_plugin._subs.set(main.SUB_KEY + "aiocqhttp:GroupMessage:111", 1)

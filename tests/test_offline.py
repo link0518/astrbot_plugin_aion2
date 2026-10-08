@@ -360,7 +360,12 @@ check(
     == ["02:00", "05:00", "08:00", "11:00", "14:00", "17:00", "20:00", "23:00"],
     "、".join(o.clock for o in rifts),
 )
-check("小游戏每半小时一场", len(games) == 48, str(len(games)))
+check("小游戏每小时整点一场", len(games) == 24, str(len(games)))
+check(
+    "小游戏落在整点",
+    [o.clock for o in games][:3] == ["00:00", "01:00", "02:00"],
+    "、".join(o.clock for o in games[:3]),
+)
 check(
     "次元入侵每小时 :30",
     len([o for o in ev.day_occurrences(wed) if o.kind == ev.KIND_INVASION]) == 24,
@@ -378,35 +383,42 @@ check(
     "场次按时间排序",
     [o.start for o in ev.day_occurrences(wed)] == sorted(o.start for o in ev.day_occurrences(wed)),
 )
-check(":15 固定第一组", ev.minigame_set(datetime(2026, 10, 7, 3, 15)) == ev.MINIGAME_SETS[0])
-check(":45 固定第二组", ev.minigame_set(datetime(2026, 10, 7, 9, 45)) == ev.MINIGAME_SETS[1])
+check("整点场按小时轮换组别", ev.minigame_set(datetime(2026, 10, 7, 2, 0)) == ev.MINIGAME_SETS[0])
+check(
+    "隔一小时换另一组",
+    ev.minigame_set(datetime(2026, 10, 7, 2, 0)) != ev.minigame_set(datetime(2026, 10, 7, 3, 0)),
+)
 check("每组 5 个游戏", all(len(s) == 5 for s in ev.MINIGAME_SETS))
 
 both = (ev.KIND_RIFT, ev.KIND_MINIGAME)
 due = ev.pending_reminders(datetime(2026, 10, 7, 16, 55), lead=5, kinds=both)
-check("整点前 5 分钟命中裂隙", [o.clock for o in due] == ["17:00"], "、".join(o.clock for o in due))
+check(
+    "整点前 5 分钟命中裂隙与小游戏",
+    [o.clock for o in due] == ["17:00", "17:00"],
+    "、".join(f"{o.kind}{o.clock}" for o in due),
+)
 check(
     "窗口之外不命中",
     ev.pending_reminders(datetime(2026, 10, 7, 16, 40), lead=5, kinds=(ev.KIND_RIFT,)) == [],
 )
 check(
     "小游戏前 5 分钟命中",
-    [o.clock for o in ev.pending_reminders(datetime(2026, 10, 7, 16, 10), lead=5, kinds=both)]
-    == ["16:15"],
+    [o.clock for o in ev.pending_reminders(datetime(2026, 10, 7, 16, 55), lead=5, kinds=both)]
+    == ["17:00", "17:00"],
 )
 check(
     "跨零点能取到次日的场次",
-    [o.clock for o in ev.pending_reminders(datetime(2026, 10, 7, 23, 55), lead=20, kinds=both)]
-    == ["00:15"],
+    [o.clock for o in ev.pending_reminders(datetime(2026, 10, 7, 23, 55), lead=5, kinds=both)]
+    == ["00:00"],
 )
-check("提前量可调", len(ev.pending_reminders(datetime(2026, 10, 7, 16, 50), lead=10, kinds=both)) == 1)
+check("提前量可调", len(ev.pending_reminders(datetime(2026, 10, 7, 16, 50), lead=10, kinds=both)) == 2)
 check(
     "下一次裂隙",
     ev.next_occurrence(datetime(2026, 10, 7, 16, 26), ev.KIND_RIFT).clock == "17:00",
 )
 check(
     "下一次小游戏",
-    ev.next_occurrence(datetime(2026, 10, 7, 16, 26), ev.KIND_MINIGAME).clock == "16:45",
+    ev.next_occurrence(datetime(2026, 10, 7, 16, 26), ev.KIND_MINIGAME).clock == "17:00",
 )
 check(
     "倒计时文案",
@@ -418,7 +430,7 @@ rift_now = datetime(2026, 10, 7, 16, 55)
 rift_note = ev.reminder_text(rift_now, ev.next_occurrence(rift_now, ev.KIND_RIFT))
 check(
     "裂隙提醒带上小游戏",
-    "时空裂隙" in rift_note and "小游戏" in rift_note and "17:15" in rift_note,
+    "时空裂隙" in rift_note and "小游戏" in rift_note and "17:00" in rift_note,
     rift_note.replace("\n", " / "),
 )
 game_now = datetime(2026, 10, 7, 16, 40)
@@ -428,12 +440,15 @@ check(
     "小游戏" in game_note and "下一次裂隙 17:00" in game_note,
     game_note.replace("\n", " / "),
 )
+# 同一时刻既有裂隙又有小游戏时，裂隙那条会把这场小游戏当「接着的」
+same_slot = ev.reminder_text(datetime(2026, 10, 7, 16, 55), ev.next_occurrence(datetime(2026, 10, 7, 16, 55), ev.KIND_RIFT))
+check("同刻的下一场小游戏也带上", "小游戏" in same_slot and "17:00" in same_slot, same_slot.replace("\n", " / "))
 
 ctx = cards.events_context(now=datetime(2026, 10, 7, 16, 26))
 check("卡片时间轴 24 格", len(ctx["cells"]) == 24, str(len(ctx["cells"])))
 check("卡片标出 8 个裂隙小时", sum(1 for c in ctx["cells"] if c["rift"]) == 8)
 check("卡片显示下一次裂隙", ctx["next_rift"] == "17:00（34 分钟后）", ctx["next_rift"])
-check("卡片显示下一次小游戏", ctx["next_game"] == "16:45（19 分钟后）", ctx["next_game"])
+check("卡片显示下一次小游戏", ctx["next_game"] == "17:00（34 分钟后）", ctx["next_game"])
 check(
     "明日卡片不标已过",
     all(r["state"] == "" for r in cards.events_context(now=datetime(2026, 10, 7, 16, 26), tomorrow=True)["rifts"]),
@@ -444,12 +459,12 @@ check(
     and ctx["head_value"] == "17:00（34 分钟后）",
     cards.events_context(now=datetime(2026, 10, 7, 16, 26), tomorrow=True)["head_value"],
 )
-live = [c for c in ctx["cells"] if c["hour"] == "16"][0]
+live = [c for c in ctx["cells"] if c["hour"] == "17"][0]
 check("进行中的小时被标出来", any(w["state"] == "soon" for w in live["windows"]), str(live))
 check(
     "时刻表文本含裂隙与小游戏",
     "时空裂隙" in cards.events_text(datetime(2026, 10, 7, 16, 26))
-    and ":15 组" in cards.events_text(datetime(2026, 10, 7, 16, 26)),
+    and ":00 组" in cards.events_text(datetime(2026, 10, 7, 16, 26)),
 )
 check("活动卡片能渲染", "活动时刻表" in render.render("events", ctx))
 check(
@@ -460,7 +475,11 @@ check(
 print("\n== 面板用的时刻表数据 ==")
 table = ev.schedule_payload(False, datetime(2026, 10, 7, 16, 26))
 check("时刻表含 24 小时", len(table["timeline"]) == 24, str(len(table["timeline"])))
-check("裂隙场次与时刻表一致", len(table["rifts"]) == len(ev.RIFT_HOURS), str(len(table["rifts"])))
+check(
+    "裂隙场次与时刻表一致",
+    len(table["rifts"]) == len(ev.DEFAULT_RIFT_HOURS),
+    str(len(table["rifts"])),
+)
 check(
     "下标出已过与即将",
     [row["state"] for row in table["rifts"]]
@@ -488,7 +507,46 @@ check(
 check(
     "时间轴的裂隙格与裂隙时刻表对应",
     [cell["hour"] for cell in table["timeline"] if cell["rift"]]
-    == [f"{hour:02d}" for hour in ev.RIFT_HOURS],
+    == [f"{hour:02d}" for hour in ev.DEFAULT_RIFT_HOURS],
+)
+
+print("\n== 自定义时刻表 ==")
+custom = ev.Schedule(
+    rift_hours=(0, 12), minigame_minutes=(15, 45), invasion_minute=0, reset_hour=4
+).normalized()
+custom_rifts = [o.clock for o in ev.day_occurrences(wed, kinds=(ev.KIND_RIFT,), schedule=custom)]
+check("自定义裂隙小时生效", custom_rifts == ["00:00", "12:00"], "、".join(custom_rifts))
+custom_games = [
+    o.clock for o in ev.day_occurrences(wed, kinds=(ev.KIND_MINIGAME,), schedule=custom)
+]
+check("自定义小游戏分钟生效", len(custom_games) == 48 and custom_games[:2] == ["00:15", "00:45"], str(custom_games[:2]))
+check(
+    "自定义分钟仍能定组别",
+    ev.minigame_set(datetime(2026, 10, 7, 3, 15), custom) == ev.MINIGAME_SETS[0]
+    and ev.minigame_set(datetime(2026, 10, 7, 3, 45), custom) == ev.MINIGAME_SETS[1],
+)
+check(
+    "自定义重置与入侵",
+    [o for o in ev.day_occurrences(wed, kinds=(ev.KIND_DAILY,), schedule=custom)][0].clock == "04:00"
+    and [
+        o.clock for o in ev.day_occurrences(wed, kinds=(ev.KIND_INVASION,), schedule=custom)
+    ][0]
+    == "00:00",
+)
+check(
+    "时刻表按自定义渲染",
+    ":15 组" in ev.text_table(datetime(2026, 10, 7, 16, 26), schedule=custom)
+    and "00:00" in ev.text_table(datetime(2026, 10, 7, 16, 26), schedule=custom),
+)
+check(
+    "越界值被收敛掉",
+    ev.Schedule(rift_hours=(99, 3, -1), minigame_minutes=(70, 30)).normalized().rift_hours == (3,)
+    and ev.Schedule(minigame_minutes=(70,)).normalized().minigame_minutes == ev.DEFAULT_MINIGAME_MINUTES,
+)
+check(
+    "空表回退到默认",
+    ev.Schedule(rift_hours=(), minigame_minutes=()).normalized().rift_hours
+    == ev.DEFAULT_RIFT_HOURS,
 )
 
 print("\n== 面板数据与配置校验 ==")
@@ -523,6 +581,55 @@ check(
     "时钟项标成 clock 控件",
     [f for g in groups for f in g["fields"] if f["key"] == "quiet_start"][0]["control"] == "clock",
 )
+hours_field = [f for g in groups for f in g["fields"] if f["key"] == "event_rift_hours"][0]
+check("裂隙小时是整数列表控件", hours_field["control"] == "minutes", hours_field["control"])
+check("裂隙小时上限 23", hours_field["listMax"] == 23, str(hours_field["listMax"]))
+check(
+    "裂隙小时依赖对应提醒开关",
+    hours_field["depends"] == ["event_push", "event_remind_rift"],
+    str(hours_field["depends"]),
+)
+check(
+    "小游戏分钟是整数列表控件",
+    [f for g in groups for f in g["fields"] if f["key"] == "event_minigame_minutes"][0]["control"]
+    == "minutes",
+)
+
+for raw, ok, label in (
+    ("2,5,8", True, "逗号分隔通过"),
+    ("2 5 8", True, "空格分隔通过"),
+    ("2、5", True, "顿号分隔通过"),
+    ("0", True, "单个 0 通过"),
+    ("", False, "空字符串被拒"),
+    ("2,99", False, "越界的小时被拒"),
+    ("2,x", False, "非数字被拒"),
+    ("2,,5", True, "多余分隔符被忽略"),
+):
+    _, error = panel.validate("event_rift_hours", raw, schema)
+    check(label, (not error) is ok, error)
+
+value, error = panel.validate("event_rift_hours", "8, 2、2,5", schema)
+check("整数列表被规范化", value == "2,5,8", repr(value))
+value, error = panel.validate("event_minigame_minutes", "59", schema)
+check("分钟上限放到 59", not error and value == "59", f"{value} / {error}")
+_, error = panel.validate("event_minigame_minutes", "60", schema)
+check("分钟 60 被拒", bool(error), error)
+
+for raw, ok, label in (
+    (30, True, "入侵分钟通过"),
+    (0, True, "入侵分钟 0 通过"),
+    (60, False, "入侵分钟 60 被拒"),
+):
+    _, error = panel.validate("event_invasion_minute", raw, schema)
+    check(label, (not error) is ok, error)
+
+for raw, ok, label in (
+    (15, True, "重置整点通过"),
+    (23, True, "重置 23 点通过"),
+    (24, False, "重置 24 点被拒"),
+):
+    _, error = panel.validate("event_reset_hour", raw, schema)
+    check(label, (not error) is ok, error)
 
 for raw, ok, label in (
     (True, True, "布尔值通过"),

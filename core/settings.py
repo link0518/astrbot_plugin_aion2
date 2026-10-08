@@ -59,6 +59,10 @@ FIELDS: tuple[dict[str, Any], ...] = (
     {"key": "event_lead", "group": "push", "min": 1, "max": 60, "unit": "分钟", "depends": ("event_push",)},
     {"key": "event_remind_rift", "group": "push", "depends": ("event_push",)},
     {"key": "event_remind_minigame", "group": "push", "depends": ("event_push",)},
+    {"key": "event_rift_hours", "group": "push", "control": "minutes", "list_max": 23, "depends": ("event_push", "event_remind_rift")},
+    {"key": "event_minigame_minutes", "group": "push", "control": "minutes", "list_max": 59, "depends": ("event_push", "event_remind_minigame")},
+    {"key": "event_invasion_minute", "group": "push", "min": 0, "max": 59, "unit": "分"},
+    {"key": "event_reset_hour", "group": "push", "min": 0, "max": 23, "unit": "时"},
     {"key": "quiet_start", "group": "push", "control": "clock", "depends": ("event_push",)},
     {"key": "quiet_end", "group": "push", "control": "clock", "depends": ("event_push",)},
     {"key": "kinah_enable", "group": "kinah"},
@@ -81,6 +85,10 @@ CLOCK_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
 # 字符串类配置的长度上限，防止把超长文本写进配置
 MAX_TEXT = 200
+
+# 「整数列表」类配置接受的写法：逗号、空格或顿号分隔；上限控制列表长度
+LIST_SPLIT_RE = re.compile(r"[,\s、，]+")
+MAX_LIST = 64
 
 
 def schema_path(root: Path) -> Path:
@@ -143,6 +151,7 @@ def describe(schema: dict[str, dict], values: dict, defaults: dict) -> list[dict
             "min": meta.get("min"),
             "max": meta.get("max"),
             "step": meta.get("step"),
+            "listMax": meta.get("list_max"),
             "depends": list(meta.get("depends", ())),
         }
         by_group.setdefault(meta["group"], []).append(item)
@@ -221,6 +230,23 @@ def validate(key: str, raw: Any, schema: dict[str, dict]) -> tuple[Any, str]:
         if text and not CLOCK_RE.match(text):
             return None, f"{key} 需要 HH:MM 格式，或留空表示不静默"
         return text, ""
+    if meta.get("control") == "minutes":
+        hours = meta.get("list_max", 23)
+        if not text:
+            return None, f"{key} 不能为空，需要一串用逗号分隔的整数"
+        parts = [p for p in LIST_SPLIT_RE.split(text) if p]
+        if len(parts) > MAX_LIST:
+            return None, f"{key} 最多 {MAX_LIST} 个值"
+        numbers = []
+        for part in parts:
+            if not re.fullmatch(r"\d{1,2}", part):
+                return None, f"{key} 里的「{part}」不是 0–{hours} 的整数"
+            value = int(part)
+            if value > hours:
+                return None, f"{key} 不能超过 {hours}"
+            numbers.append(value)
+        deduped = sorted(set(numbers))
+        return ",".join(str(n) for n in deduped), ""
     return text, ""
 
 

@@ -35,13 +35,37 @@
     "description": "提醒时空裂隙",
     "type": "bool",
     "default": true,
-    "hint": "每天 8 场，每 3 小时一次。"
+    "hint": "按下方「裂隙小时」的时刻推送，每场提前量同上。"
   },
   "event_remind_minigame": {
     "description": "提醒小游戏",
     "type": "bool",
     "default": true,
-    "hint": "每小时 :15 与 :45 各一场，一天 48 场；觉得吵可以关掉，只留裂隙。"
+    "hint": "按下方「小游戏分钟」的时刻推送。默认每小时整点一场，一天 24 场；觉得吵可以关掉，只留裂隙。"
+  },
+  "event_rift_hours": {
+    "description": "裂隙小时",
+    "type": "string",
+    "default": "2,5,8,11,14,17,20,23",
+    "hint": "时空裂隙在一天里的开赛整点，用逗号分隔（0–23）。默认每 3 小时一场，共 8 场。"
+  },
+  "event_minigame_minutes": {
+    "description": "小游戏分钟",
+    "type": "string",
+    "default": "0",
+    "hint": "小游戏在每小时的哪一分钟开始，用逗号分隔（0–59）。默认「0」即每小时整点一场。填「15,45」可恢复成每小时两场。"
+  },
+  "event_invasion_minute": {
+    "description": "次元入侵分钟",
+    "type": "int",
+    "default": 30,
+    "min": 0
+  },
+  "event_reset_hour": {
+    "description": "每日重置整点",
+    "type": "int",
+    "default": 15,
+    "min": 0
   },
   "quiet_start": {
     "description": "静默时段开始",

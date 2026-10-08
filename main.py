@@ -292,7 +292,7 @@ class Aion2Plugin(Star):
         span = self._quiet_range()
         upcoming = []
         for kind in (events.KIND_RIFT, events.KIND_MINIGAME):
-            occ = events.next_occurrence(now, kind)
+            occ = events.next_occurrence(now, kind, self._schedule())
             if occ is None:
                 continue
             upcoming.append(
@@ -617,8 +617,7 @@ class Aion2Plugin(Star):
             "排行 [榜单]　排行榜",
             "活动 [明天]　活动时刻表",
             "活动 订阅　订阅开场提醒（裂隙、小游戏）",
-            "活动 退订　取消订阅",
-            "基纳　各区基纳价格（每小时更新）",
+            "活动 退订　取消订阅",            "基纳　各区基纳价格（每小时更新）",
             "区域　查询区域说明",
             "帮助　本说明",
             "",
@@ -796,6 +795,32 @@ class Aion2Plugin(Star):
         except (TypeError, ValueError):
             return 5
 
+    def _schedule(self) -> events.Schedule:
+        """按配置拼出活动时刻表，越界或空表回退到默认值。"""
+
+        def numbers(key: str, limit: int) -> tuple[int, ...]:
+            raw = str(self.config.get(key, "") or "")
+            out = []
+            for part in re.split(r"[,\s、，]+", raw.strip()):
+                if part.isdigit() and 0 <= int(part) <= limit:
+                    out.append(int(part))
+            return tuple(sorted(set(out)))
+
+        def number(key: str, default: int, limit: int) -> int:
+            try:
+                value = int(self.config.get(key, default))
+            except (TypeError, ValueError):
+                return default
+            return value if 0 <= value <= limit else default
+
+        defaults = events.DEFAULT_SCHEDULE
+        return events.Schedule(
+            rift_hours=numbers("event_rift_hours", 23) or defaults.rift_hours,
+            minigame_minutes=numbers("event_minigame_minutes", 59) or defaults.minigame_minutes,
+            invasion_minute=number("event_invasion_minute", defaults.invasion_minute, 59),
+            reset_hour=number("event_reset_hour", defaults.reset_hour, 23),
+        ).normalized()
+
     def _push_kinds(self) -> tuple[str, ...]:
         kinds = []
         if self.config.get("event_remind_rift", True):
@@ -845,9 +870,12 @@ class Aion2Plugin(Star):
     def _subscribe_note(self) -> str:
         span = self._quiet_range()
         labels = [events.KIND_NAMES[k] for k in self._push_kinds()]
+        spec = self._schedule()
+        minutes = "、".join(f":{m:02d}" for m in spec.minigame_minutes)
         lines = [
             "已订阅活动提醒",
             f"提前 {self._lead()} 分钟推送：{'、'.join(labels) or '未选择任何事件'}",
+            f"裂隙每天 {len(spec.rift_hours)} 场，小游戏每小时 {minutes}",
             f"静默时段：{self._clock(span[0])}–{self._clock(span[1])}" if span else "静默时段：无",
             "发送「活动 退订」可取消。",
         ]
@@ -885,8 +913,9 @@ class Aion2Plugin(Star):
             return
         tomorrow = key in ("明天", "tomorrow", "明日")
         now = datetime.now()
-        ctx = render.events_context(now=now, tomorrow=tomorrow, width=self._width())
-        text = render.events_text(now=now, tomorrow=tomorrow)
+        schedule = self._schedule()
+        ctx = render.events_context(now=now, tomorrow=tomorrow, width=self._width(), schedule=schedule)
+        text = render.events_text(now=now, tomorrow=tomorrow, schedule=schedule)
         yield await self._emit(event, "events", ctx, text)
 
     @filter.command("基纳")
@@ -927,7 +956,9 @@ class Aion2Plugin(Star):
         moment = now or datetime.now()
         if not self.config.get("event_push", True) or self._in_quiet(moment):
             return 0
-        due = events.pending_reminders(moment, lead=self._lead(), kinds=self._push_kinds())
+        due = events.pending_reminders(
+            moment, lead=self._lead(), kinds=self._push_kinds(), schedule=self._schedule()
+        )
         targets = self.subscribers()
         if not due or not targets:
             return 0
@@ -936,7 +967,7 @@ class Aion2Plugin(Star):
             key = SENT_KEY + occ.key
             if self._sent.get(key) is not None:
                 continue
-            text = events.reminder_text(moment, occ, lead=self._lead())
+            text = events.reminder_text(moment, occ, lead=self._lead(), schedule=self._schedule())
             for umo in targets:
                 try:
                     await self.context.send_message(umo, MessageChain().message(text))

@@ -403,6 +403,11 @@ button.btn:disabled {
   gap: 8px;
 }
 
+/* 装整数列表的字段需要更宽的控件区，否则一长串数字被压成窄条 */
+.field .ctl:has(.ctl-list) {
+  flex-basis: 300px;
+}
+
 .field.disabled .meta {
   opacity: 0.5;
 }
@@ -483,6 +488,16 @@ select.dirty {
 
 .ctl-inline input {
   width: 110px;
+}
+
+/* 整数列表比单个数值长，给它整行宽度，别挤在 110px 里 */
+.ctl-inline input.ctl-list {
+  width: 100%;
+  max-width: 260px;
+}
+
+.ctl-inline input.ctl-list + .unit {
+  white-space: nowrap;
 }
 
 .switch {

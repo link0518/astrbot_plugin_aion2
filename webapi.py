@@ -106,7 +106,7 @@ class ConsoleAPI:
         return rows
 
     def _schedule(self, tomorrow: bool) -> dict:
-        return events.schedule_payload(tomorrow)
+        return events.schedule_payload(tomorrow, schedule=self.plugin._schedule())
 
     # ---------------------------------------------------------------- 写入
 

@@ -367,12 +367,19 @@ def _next_label(now: datetime, occ, tomorrow: bool) -> str:
 
 
 def events_context(
-    *, now: datetime | None = None, tomorrow: bool = False, width: int = 720
+    *,
+    now: datetime | None = None,
+    tomorrow: bool = False,
+    width: int = 720,
+    schedule: events.Schedule | None = None,
 ) -> dict:
     """活动时刻表卡片。全部为本地推算，不需要客户端。"""
+    spec = (schedule or events.DEFAULT_SCHEDULE).normalized()
     moment = (now or datetime.now()).replace(second=0, microsecond=0)
     day = (moment + timedelta(days=1)).date() if tomorrow else moment.date()
-    next_rift = _next_label(moment, events.next_occurrence(moment, events.KIND_RIFT), tomorrow)
+    next_rift = _next_label(
+        moment, events.next_occurrence(moment, events.KIND_RIFT, spec), tomorrow
+    )
     return {
         "width": width,
         "day_label": "明日" if tomorrow else "今日",
@@ -380,11 +387,11 @@ def events_context(
         "now_label": f"现在 {moment:%H:%M}",
         # 明日卡片没有「下一次」，改为标出当天首场，免得右上角空着
         "head_label": "首场裂隙" if tomorrow else "下一次裂隙",
-        "head_value": f"{events.RIFT_HOURS[0]:02d}:00"
-        if tomorrow
-        else (next_rift or "—"),
+        "head_value": f"{spec.rift_hours[0]:02d}:00" if tomorrow else (next_rift or "—"),
         "next_rift": next_rift,
-        "next_game": _next_label(moment, events.next_occurrence(moment, events.KIND_MINIGAME), tomorrow),
+        "next_game": _next_label(
+            moment, events.next_occurrence(moment, events.KIND_MINIGAME, spec), tomorrow
+        ),
         "rifts": [
             {
                 "time": f"{hour:02d}:00",
@@ -394,25 +401,32 @@ def events_context(
                     datetime.combine(day, time(hour, 0)), moment, events.RIFT_DURATION
                 ),
             }
-            for hour in events.RIFT_HOURS
+            for hour in spec.rift_hours
         ],
-        "cells": events.timeline(day, moment),
+        "cells": events.timeline(day, moment, spec),
+        "game_minutes": len(spec.minigame_minutes),
+        "invasion_minute": f"{spec.invasion_minute:02d}",
         "sets": [
             {"label": f":{minute:02d}", "games": "、".join(games)}
-            for minute, games in zip(events.MINIGAME_MINUTES, events.MINIGAME_SETS)
+            for minute, games in zip(spec.minigame_minutes, events.MINIGAME_SETS)
         ],
         "others": [
-            {"name": "次元入侵", "value": f"每小时 :{events.INVASION_MINUTE:02d}"},
-            {"name": "每日重置", "value": f"{events.RESET_HOUR:02d}:00"},
-            {"name": "每周重置", "value": f"周三 {events.RESET_HOUR:02d}:00"},
+            {"name": "次元入侵", "value": f"每小时 :{spec.invasion_minute:02d}"},
+            {"name": "每日重置", "value": f"{spec.reset_hour:02d}:00"},
+            {"name": "每周重置", "value": f"周三 {spec.reset_hour:02d}:00"},
         ],
         "state_labels": events.STATE_LABELS,
         "stamp": _now(),
     }
 
 
-def events_text(now: datetime | None = None, *, tomorrow: bool = False) -> str:
-    return events.text_table(now, tomorrow=tomorrow)
+def events_text(
+    now: datetime | None = None,
+    *,
+    tomorrow: bool = False,
+    schedule: events.Schedule | None = None,
+) -> str:
+    return events.text_table(now, tomorrow=tomorrow, schedule=schedule)
 
 
 def kinah_context(snapshot, *, width: int = 720) -> dict:

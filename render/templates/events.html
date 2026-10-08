@@ -55,7 +55,7 @@
 </div>
 
 <div class="sec">
-  <div class="sec-t">小游戏<span class="cnt">每小时 :15 与 :45 两个窗口{% if next_game %} · 下一场 {{ next_game }}{% endif %}</span></div>
+  <div class="sec-t">小游戏<span class="cnt">每小时 {{ game_minutes }} 场{% if next_game %} · 下一场 {{ next_game }}{% endif %}</span></div>
   <div class="tl">
     {% for c in cells %}
     <div class="tl-c {{ c.rift_state }}">
@@ -69,13 +69,13 @@
   <div class="legend">
     <span><i style="background:#3f6fa8"></i>时空裂隙</span>
     <span><i style="background:#c9903f"></i>小游戏</span>
-    <span><i style="background:#4a5268;border-radius:50%;width:5px;height:5px"></i>次元入侵 :30</span>
+    <span><i style="background:#4a5268;border-radius:50%;width:5px;height:5px"></i>次元入侵 :{{ invasion_minute }}</span>
     <span>每格 1 小时，按 :00 / :15 / :30 / :45 排列</span>
   </div>
 </div>
 
 <div class="sec">
-  <div class="sec-t">小游戏组别<span class="cnt">{{ sets|length }} 组，按窗口固定</span></div>
+  <div class="sec-t">小游戏组别<span class="cnt">{{ sets|length }} 组，按小时交替</span></div>
   <div class="rows">
     {% for s in sets %}
     <div class="row"><span class="chip">{{ s.label }}</span><span class="eq-n">{{ s.games }}</span></div>

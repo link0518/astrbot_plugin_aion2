@@ -323,8 +323,20 @@ function sameValue(item, a, b) {
   return String(a ?? "") === String(b ?? "");
 }
 
-function buildControl(item, value, onChange) {
-  if (item.type === "bool") {
+/** 把「2,5,8」这类整数列表说成人话，比如「共 3 个整点」。 */
+function minutesPreview(item, raw) {
+  const parts = String(raw ?? "")
+    .split(/[,\s、，]+/)
+    .filter(Boolean);
+  if (!parts.length) return "";
+  const limit = item.listMax == null ? 59 : item.listMax;
+  const bad = parts.some((p) => !/^\d{1,2}$/.test(p) || Number(p) > limit);
+  if (bad) return `需要 0–${limit}`;
+  const count = new Set(parts).size;
+  return limit >= 59 ? `共 ${count} 个分钟点` : `共 ${count} 个整点`;
+}
+
+function buildControl(item, value, onChange) {  if (item.type === "bool") {
     const input = el("input", { type: "checkbox" });
     input.checked = Boolean(value);
     input.addEventListener("change", () => onChange(input.checked));
@@ -348,6 +360,22 @@ function buildControl(item, value, onChange) {
       input,
       el("span", { class: "unit", text: "留空不静默" }),
     ]);
+  }
+  if (item.control === "minutes") {
+    // 一串用逗号分隔的整数，例如裂隙的整点、小游戏的分钟
+    const input = el("input", {
+      type: "text",
+      class: "ctl-list",
+      placeholder: "逗号分隔",
+      maxlength: "120",
+    });
+    input.value = value ?? "";
+    const preview = el("span", { class: "unit", text: minutesPreview(item, value) });
+    input.addEventListener("change", () => {
+      onChange(input.value.trim());
+      preview.textContent = minutesPreview(item, input.value.trim());
+    });
+    return el("div", { class: "ctl-inline" }, [input, preview]);
   }
   if (item.type === "int" || item.type === "float") {
     const input = el("input", {
@@ -514,7 +542,7 @@ function renderSchedule() {
   frag.append(
     card(
       "小游戏组别",
-      "每小时 :15 与 :45 各开一场，两组交替；游戏名官方没有中文来源，保留原文。",
+      `每小时 ${s.gameMinutes || 1} 场，按小时交替；游戏名官方没有中文来源，保留原文。`,
       s.sets.map((set) =>
         el("div", { style: "display:flex;gap:10px;align-items:baseline;margin-bottom:8px" }, [
           el("span", { class: "badge", text: set.label }),
